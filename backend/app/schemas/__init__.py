@@ -1,0 +1,31 @@
+from app.schemas.api import (
+    AllocationItem,
+    AssetDetail,
+    AssetSummary,
+    BacktestRequest,
+    BacktestResult,
+    CSVImportResult,
+    DashboardSummary,
+    PositionCreate,
+    PositionUpdate,
+    PositionView,
+    PoliticalEventView,
+    PortfolioView,
+    RecommendationView,
+)
+
+__all__ = [
+    "AllocationItem",
+    "AssetDetail",
+    "AssetSummary",
+    "BacktestRequest",
+    "BacktestResult",
+    "CSVImportResult",
+    "DashboardSummary",
+    "PositionCreate",
+    "PositionUpdate",
+    "PositionView",
+    "PoliticalEventView",
+    "PortfolioView",
+    "RecommendationView",
+]

@@ -1,0 +1,199 @@
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from app.core.time import ensure_utc
+
+
+class UTCModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("generated_at", "occurs_at", "as_of", "published_at", check_fields=False)
+    @classmethod
+    def normalize_dates(cls, value: datetime) -> datetime:
+        return ensure_utc(value)
+
+
+class AssetSummary(UTCModel):
+    symbol: str
+    name: str
+    asset_type: str
+    currency: str
+    sector: str
+    price: Decimal
+    change_percent: Decimal
+
+
+class AssetDetail(AssetSummary):
+    market_cap: Decimal
+    pe_ratio: Decimal
+    dividend_yield: Decimal
+    fair_value: Decimal
+    technical_signal: Literal["bullish", "neutral", "bearish"]
+
+
+class RecommendationView(UTCModel):
+    symbol: str
+    rating: Literal["BUY", "HOLD", "SELL"]
+    score: Decimal
+    rationale: str
+    horizon: str
+    generated_at: datetime
+
+
+class PositionBase(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-]+$")
+    quantity: Decimal = Field(gt=0, decimal_places=8)
+    average_purchase_price: Decimal = Field(gt=0, decimal_places=6)
+    purchase_date: date
+    currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    fees: Decimal | None = Field(default=None, ge=0, decimal_places=4)
+
+    @field_validator("symbol", "currency")
+    @classmethod
+    def normalize_codes(cls, value: str) -> str:
+        return value.upper()
+
+
+class PositionCreate(PositionBase):
+    pass
+
+
+class PositionUpdate(BaseModel):
+    symbol: str | None = Field(default=None, min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-]+$")
+    quantity: Decimal | None = Field(default=None, gt=0, decimal_places=8)
+    average_purchase_price: Decimal | None = Field(default=None, gt=0, decimal_places=6)
+    purchase_date: date | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    fees: Decimal | None = Field(default=None, ge=0, decimal_places=4)
+
+    @field_validator("symbol", "currency")
+    @classmethod
+    def normalize_optional_codes(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+    @model_validator(mode="after")
+    def require_change(self) -> "PositionUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one field must be provided")
+        return self
+
+
+class PositionView(PositionBase):
+    id: int
+    sector: str
+    geography: str
+    current_price: Decimal
+    current_value: Decimal
+    invested_capital: Decimal
+    unrealized_pnl: Decimal
+    return_percent: Decimal
+
+
+class AllocationItem(BaseModel):
+    label: str
+    value: Decimal
+    percent: Decimal
+
+
+class ConcentrationMetrics(BaseModel):
+    largest_position_symbol: str
+    largest_position_percent: Decimal
+    top_three_percent: Decimal
+
+
+class RiskMetrics(BaseModel):
+    historical_volatility_percent: Decimal
+    max_drawdown_percent: Decimal
+    concentration: ConcentrationMetrics
+
+
+class CorrelationItem(BaseModel):
+    first_symbol: str
+    second_symbol: str
+    coefficient: Decimal = Field(ge=-1, le=1)
+
+
+class StressScenario(BaseModel):
+    name: str
+    shock_percent: Decimal
+    projected_value: Decimal
+    projected_pnl: Decimal
+
+
+class NewsImpact(UTCModel):
+    title: str
+    published_at: datetime
+    affected_symbols: list[str]
+    impact: Literal["positive", "neutral", "negative"]
+    summary: str
+
+
+class PortfolioView(UTCModel):
+    name: str
+    base_currency: str
+    current_value: Decimal
+    invested_capital: Decimal
+    unrealized_pnl: Decimal
+    total_return_percent: Decimal
+    as_of: datetime
+    positions: list[PositionView]
+    allocation_by_asset: list[AllocationItem]
+    allocation_by_sector: list[AllocationItem]
+    allocation_by_currency: list[AllocationItem]
+    risk: RiskMetrics
+    correlations: list[CorrelationItem]
+    political_and_geographic_risks: list[str]
+    stress_scenarios: list[StressScenario]
+    news_impacts: list[NewsImpact]
+    disclaimer: str
+
+
+class CSVImportResult(BaseModel):
+    imported_count: int
+    positions: list[PositionView]
+    errors: list[str]
+
+
+class PoliticalEventView(UTCModel):
+    title: str
+    region: str
+    impact: Literal["high", "medium", "low"]
+    summary: str
+    affected_assets: list[str]
+    occurs_at: datetime
+
+
+class DashboardSummary(BaseModel):
+    portfolio_value: Decimal
+    invested_capital: Decimal
+    unrealized_pnl: Decimal
+    total_return_percent: Decimal
+    active_recommendations: int
+    high_impact_events: int
+    market_status: str
+
+
+class BacktestRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=16)
+    initial_capital: Decimal = Field(default=Decimal("10000.00"), gt=0)
+    short_window: int = Field(default=10, ge=2, le=100)
+    long_window: int = Field(default=30, ge=3, le=250)
+
+    @field_validator("long_window")
+    @classmethod
+    def validate_windows(cls, value: int, info: ValidationInfo) -> int:
+        if value <= info.data.get("short_window", 0):
+            raise ValueError("long_window must be greater than short_window")
+        return value
+
+
+class BacktestResult(BaseModel):
+    symbol: str
+    total_return_percent: Decimal
+    max_drawdown_percent: Decimal
+    sharpe_ratio: Decimal
+    trades: int
+    note: str

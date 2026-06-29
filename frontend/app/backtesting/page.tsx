@@ -1,0 +1,14 @@
+import { MetricCard, PageHeader } from "@/components/ui";
+import { pricePath } from "@/lib/demo-data";
+
+export const metadata = { title: "Backtesting" };
+
+export default function BacktestingPage() {
+  return (
+    <>
+      <PageHeader title="Backtesting" description="Test research ideas against deterministic historical demo series." action={<span className="timestamp">No look-ahead controls yet</span>} />
+      <section className="backtest-layout"><aside className="panel strategy-form"><p className="eyebrow">Configuration</p><h2>Strategy parameters</h2><label>Asset<select defaultValue="AAPL"><option>AAPL · Apple Inc.</option><option>MSFT · Microsoft</option><option>TLT · Treasury ETF</option></select></label><label>Strategy<select defaultValue="moving"><option value="moving">Moving-average crossover</option><option value="hold">Buy and hold</option></select></label><div className="field-row"><label>Short window<input type="number" defaultValue="10" min="2"/></label><label>Long window<input type="number" defaultValue="30" min="3"/></label></div><label>Initial capital (USD)<input type="number" defaultValue="10000" min="1"/></label><label>Period<div className="field-row"><input type="date" defaultValue="2025-06-29"/><input type="date" defaultValue="2026-06-29"/></div></label><button className="primary-button full-width">Run demo backtest</button><p className="ticket-warning">Results use a fixed synthetic series and exclude fees, slippage, taxes and liquidity constraints.</p></aside><div className="backtest-results"><section className="metrics-grid compact-metrics"><MetricCard label="Total return" value="+15.00%" detail="Baseline +11.20%" tone="positive"/><MetricCard label="Max drawdown" value="-3.70%" detail="Synthetic curve" tone="negative"/><MetricCard label="Sharpe ratio" value="1.31" detail="Risk-free rate 0%"/><MetricCard label="Trades" value="7" detail="4 wins · 3 losses"/></section><article className="panel chart-panel"><div className="panel-heading"><div><p className="eyebrow">Equity curve</p><h2>Strategy vs baseline</h2></div><div className="chart-legend"><span><i/>Strategy</span><span><i/>Buy & hold</span></div></div><svg className="main-chart backtest-chart" viewBox="0 0 620 180" preserveAspectRatio="none"><path d={pricePath} fill="none" stroke="#2dd4a8" strokeWidth="3" vectorEffect="non-scaling-stroke"/><path d="M0 160 C80 145, 110 148, 180 120 S290 115, 360 82 S490 72, 620 48" fill="none" stroke="#77839a" strokeDasharray="5 5" strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg><div className="chart-axis"><span>Jun 2025</span><span>Sep 2025</span><span>Dec 2025</span><span>Jun 2026</span></div></article><article className="panel assumption-panel"><h2>Model boundaries</h2><ul><li>Daily close prices only</li><li>No transaction costs or spread</li><li>No survivorship-bias control</li><li>No corporate-action adjustments</li></ul></article></div></section>
+    </>
+  );
+}
+

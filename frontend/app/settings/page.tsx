@@ -1,0 +1,13 @@
+import { PageHeader } from "@/components/ui";
+
+export const metadata = { title: "Settings" };
+
+export default function SettingsPage() {
+  return (
+    <>
+      <PageHeader title="Settings" description="Configure display preferences and inspect the demo environment." />
+      <section className="settings-layout"><nav className="panel settings-nav"><a href="#general" className="active">General</a><a href="#risk">Risk preferences</a><a href="#data">Data sources</a><a href="#system">System</a></nav><div className="settings-content"><article className="panel settings-section" id="general"><div><p className="eyebrow">Workspace</p><h2>General</h2><p>Defaults used across dashboards and reports.</p></div><label>Base currency<select defaultValue="USD"><option>USD</option><option>EUR</option><option>GBP</option></select></label><label>Display timezone<select defaultValue="UTC"><option>UTC</option></select><small>Storage and API values always remain UTC.</small></label><label>Number format<select defaultValue="en-US"><option value="en-US">1,234.56</option><option value="de-DE">1.234,56</option></select></label></article><article className="panel settings-section" id="risk"><div><p className="eyebrow">Research profile</p><h2>Risk preferences</h2><p>Used only to contextualize demonstration research output.</p></div><label>Risk tolerance<select defaultValue="moderate"><option value="conservative">Conservative</option><option value="moderate">Moderate</option><option value="growth">Growth</option></select></label><label>Default horizon<select defaultValue="12"><option value="6">6 months</option><option value="12">12 months</option><option value="36">3 years</option></select></label></article><article className="panel settings-section" id="data"><div><p className="eyebrow">Read-only inputs</p><h2>Data sources</h2><p>Only the built-in deterministic source is currently enabled.</p></div><div className="source-status"><span className="status-dot"/><div><strong>DemoMarketDataSource</strong><small>Static · last fixture timestamp 2026-06-29 12:00 UTC</small></div><em>ACTIVE</em></div><div className="source-status disabled"><span/><div><strong>Broker connection</strong><small>Unavailable by product design</small></div><em>DISABLED</em></div></article><article className="panel settings-section" id="system"><div><p className="eyebrow">Environment</p><h2>System</h2></div><dl className="system-grid"><div><dt>Frontend</dt><dd>Next.js / TypeScript</dd></div><div><dt>API</dt><dd>FastAPI / Python</dd></div><div><dt>Database</dt><dd>PostgreSQL</dd></div><div><dt>Mode</dt><dd>Demonstration</dd></div></dl><button className="secondary-button">Check API health</button></article></div></section>
+    </>
+  );
+}
+
