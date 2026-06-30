@@ -13,3 +13,5 @@ frontend/out/
 *.log
 .DS_Store
 
+
+.env
