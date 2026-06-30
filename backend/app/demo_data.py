@@ -90,18 +90,18 @@ RECOMMENDATIONS: list[dict[str, Any]] = [
 
 POLITICAL_EVENTS: list[dict[str, Any]] = [
     {
-        "title": "Central bank policy testimony",
-        "region": "United States",
+        "title": "Выступление руководителя центрального банка",
+        "region": "США",
         "impact": "high",
-        "summary": "Demo scenario for assessing rate-sensitive assets; not a live event feed.",
+        "summary": "Сценарий для оценки влияния процентной политики на облигации и акции роста.",
         "affected_assets": ["TLT", "AAPL", "MSFT"],
         "occurs_at": datetime(2026, 7, 1, 14, 0, tzinfo=UTC),
     },
     {
-        "title": "Technology export policy review",
-        "region": "Global",
+        "title": "Пересмотр правил экспорта технологий",
+        "region": "Мировой рынок",
         "impact": "medium",
-        "summary": "Illustrative policy-risk event for semiconductor exposure.",
+        "summary": "Сценарий регуляторного риска для производителей полупроводников.",
         "affected_assets": ["NVDA"],
         "occurs_at": datetime(2026, 7, 8, 10, 30, tzinfo=UTC),
     },

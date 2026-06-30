@@ -23,7 +23,10 @@ class OwnedPosition:
     fees: Decimal | None
     sector: str
     geography: str
-    current_price: Decimal
+    current_price: Decimal | None
+    price_source: str | None = None
+    price_updated_at: datetime | None = None
+    price_is_stale: bool | None = None
 
 
 def calculate_market_value(quantity: Decimal, price: Decimal) -> Decimal:
@@ -37,11 +40,18 @@ def position_metrics(position: OwnedPosition) -> dict[str, object]:
     invested_capital = (
         position.quantity * position.average_purchase_price + fees
     ).quantize(Decimal("0.01"))
-    current_value = calculate_market_value(position.quantity, position.current_price)
-    unrealized_pnl = (current_value - invested_capital).quantize(Decimal("0.01"))
+    current_value = (
+        calculate_market_value(position.quantity, position.current_price)
+        if position.current_price is not None else None
+    )
+    unrealized_pnl = (
+        (current_value - invested_capital).quantize(Decimal("0.01"))
+        if current_value is not None else None
+    )
     return_percent = (
-        unrealized_pnl / invested_capital * Decimal("100")
-    ).quantize(Decimal("0.01"))
+        (unrealized_pnl / invested_capital * Decimal("100")).quantize(Decimal("0.01"))
+        if unrealized_pnl is not None else None
+    )
     return {
         "id": position.id,
         "symbol": position.symbol,
@@ -57,6 +67,10 @@ def position_metrics(position: OwnedPosition) -> dict[str, object]:
         "invested_capital": invested_capital,
         "unrealized_pnl": unrealized_pnl,
         "return_percent": return_percent,
+        "is_valued": current_value is not None,
+        "price_source": position.price_source,
+        "price_updated_at": position.price_updated_at,
+        "price_is_stale": position.price_is_stale,
     }
 
 
@@ -64,8 +78,13 @@ def _allocation(
     positions: list[OwnedPosition], metrics: list[dict[str, object]], group: str
 ) -> list[dict[str, object]]:
     values: defaultdict[str, Decimal] = defaultdict(Decimal)
-    total = sum((Decimal(str(item["current_value"])) for item in metrics), Decimal("0"))
+    total = sum(
+        (Decimal(str(item["current_value"])) for item in metrics if item["current_value"] is not None),
+        Decimal("0"),
+    )
     for position, item in zip(positions, metrics, strict=True):
+        if item["current_value"] is None:
+            continue
         label = position.symbol if group == "symbol" else str(getattr(position, group))
         values[label] += Decimal(str(item["current_value"]))
     return [
@@ -87,10 +106,14 @@ def analyze_portfolio(
     as_of: datetime,
 ) -> dict[str, object]:
     metrics = [position_metrics(position) for position in positions]
+    valued_metrics = [item for item in metrics if item["current_value"] is not None]
     current_value = sum(
-        (Decimal(str(item["current_value"])) for item in metrics), Decimal("0")
+        (Decimal(str(item["current_value"])) for item in valued_metrics), Decimal("0")
     ).quantize(Decimal("0.01"))
     invested_capital = sum(
+        (Decimal(str(item["invested_capital"])) for item in valued_metrics), Decimal("0")
+    ).quantize(Decimal("0.01"))
+    recorded_invested_capital = sum(
         (Decimal(str(item["invested_capital"])) for item in metrics), Decimal("0")
     ).quantize(Decimal("0.01"))
     unrealized_pnl = (current_value - invested_capital).quantize(Decimal("0.01"))
@@ -147,6 +170,8 @@ def analyze_portfolio(
         "base_currency": base_currency,
         "current_value": current_value,
         "invested_capital": invested_capital,
+        "recorded_invested_capital": recorded_invested_capital,
+        "unvalued_positions_count": len(metrics) - len(valued_metrics),
         "unrealized_pnl": unrealized_pnl,
         "total_return_percent": total_return,
         "as_of": as_of,
@@ -181,14 +206,14 @@ def analyze_portfolio(
         "stress_scenarios": stress_scenarios,
         "news_impacts": [
             {
-                "title": "Technology sector policy review",
+                "title": "Пересмотр регулирования технологического сектора",
                 "published_at": datetime(2026, 6, 29, 9, 30, tzinfo=UTC),
                 "affected_symbols": [symbol for symbol in symbols if symbol in {"AAPL", "MSFT", "NVDA"}],
                 "impact": "negative",
                 "summary": "Политическая неопределённость повышает риск-премию технологических позиций.",
             },
             {
-                "title": "Long-term yields stabilize",
+                "title": "Стабилизация долгосрочных доходностей",
                 "published_at": datetime(2026, 6, 28, 16, 0, tzinfo=UTC),
                 "affected_symbols": [symbol for symbol in symbols if symbol == "TLT"],
                 "impact": "positive",

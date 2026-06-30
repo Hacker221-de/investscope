@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
+from app.api.market_data import router as market_data_router
 from app.core.config import get_settings
 from app.core.time import utc_now
 
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router, prefix=settings.api_prefix)
+app.include_router(market_data_router, prefix="/api")
 
 
 class HealthResponse(TypedDict):

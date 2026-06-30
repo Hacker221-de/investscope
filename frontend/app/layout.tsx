@@ -7,18 +7,18 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "InvestScope", template: "%s · InvestScope" },
-  description: "Investment research and analytics for user-entered portfolio positions.",
+  description: "Инвестиционная аналитика и анализ введённых пользователем позиций портфеля.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body>
         <Sidebar />
         <div className="app-shell">
           <AnalyticsBanner />
           <main>{children}</main>
-          <footer>InvestScope analytics · Market data is illustrative · Times shown in UTC · Not investment advice</footer>
+          <footer>InvestScope · Рыночные данные демонстрационные · Время указано в UTC · Не является инвестиционной рекомендацией</footer>
         </div>
       </body>
     </html>

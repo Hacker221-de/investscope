@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navigation = [
-  ["/", "Overview", "D"],
-  ["/assets", "Assets", "A"],
-  ["/recommendations", "Recommendations", "R"],
-  ["/portfolio", "Portfolio", "P"],
-  ["/political-events", "Political events", "E"],
-  ["/backtesting", "Backtesting", "B"],
-  ["/settings", "Settings", "S"],
+  ["/", "Обзор", "О"],
+  ["/assets", "Активы", "А"],
+  ["/recommendations", "Аналитические рейтинги", "Р"],
+  ["/portfolio", "Портфель", "П"],
+  ["/political-events", "Политические события", "С"],
+  ["/backtesting", "Историческое тестирование", "Т"],
+  ["/settings", "Настройки", "Н"],
 ] as const;
 
 export function Sidebar() {
@@ -18,11 +18,11 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <Link href="/" className="brand" aria-label="InvestScope dashboard">
+      <Link href="/" className="brand" aria-label="Обзор InvestScope">
         <span className="brand-mark">IS</span>
         <span>
           <strong>InvestScope</strong>
-          <small>Research terminal</small>
+          <small>Аналитическая платформа</small>
         </span>
       </Link>
       <nav className="nav" aria-label="Primary navigation">
@@ -39,11 +39,10 @@ export function Sidebar() {
       <div className="sidebar-status">
         <span className="status-dot" />
         <div>
-          <strong>Demo environment</strong>
-          <small>No live market feed</small>
+          <strong>Демонстрационные данные</strong>
+          <small>Нет потока котировок</small>
         </div>
       </div>
     </aside>
   );
 }
-

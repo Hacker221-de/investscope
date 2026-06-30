@@ -21,6 +21,8 @@ services:
     environment:
       INVESTSCOPE_DATABASE_URL: ${INVESTSCOPE_DATABASE_URL:-postgresql+psycopg://investscope:investscope@db:5432/investscope}
       INVESTSCOPE_CORS_ORIGINS: '["http://localhost:3000"]'
+      INVESTSCOPE_MARKET_DATA_PROVIDER: ${INVESTSCOPE_MARKET_DATA_PROVIDER:-demo}
+      INVESTSCOPE_ALPHA_VANTAGE_API_KEY: ${INVESTSCOPE_ALPHA_VANTAGE_API_KEY:-}
     command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     ports:
       - "8000:8000"
@@ -37,6 +39,7 @@ services:
     build: ./frontend
     environment:
       NEXT_PUBLIC_API_URL: http://backend:8000/api/v1
+      NEXT_PUBLIC_API_ROOT: http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -45,4 +48,3 @@ services:
 
 volumes:
   postgres_data:
-

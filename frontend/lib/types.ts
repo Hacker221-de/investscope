@@ -28,6 +28,49 @@ export interface Position {
   weight: number;
 }
 
+export interface MarketQuote {
+  close: string;
+  previous_close: string | null;
+  change: string | null;
+  change_percent: string | null;
+  currency: string;
+  source: string;
+  event_time: string;
+  published_at: string | null;
+  received_at: string;
+  is_stale: boolean;
+}
+
+export interface MarketAsset {
+  id: number;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  exchange: string | null;
+  sector: string | null;
+  industry: string | null;
+  currency: string;
+  provider_symbol: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  latest_quote: MarketQuote | null;
+}
+
+export interface MarketBar {
+  timeframe: string;
+  event_time: string;
+  open: string | null;
+  high: string | null;
+  low: string | null;
+  close: string | null;
+  adjusted_close: string | null;
+  volume: number | null;
+  provider: string;
+  published_at: string | null;
+  received_at: string;
+}
+
 export interface PoliticalEvent {
   date: string;
   time: string;

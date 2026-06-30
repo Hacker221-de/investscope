@@ -231,6 +231,6 @@ def run_backtest(request: BacktestRequest) -> BacktestResult:
         total_return_percent=result["total_return_percent"],
         max_drawdown_percent=result["max_drawdown_percent"],
         sharpe_ratio=Decimal("1.31"),
-        trades=int(result["trades"]),
+        signals=int(result["signals"]),
         note="Illustrative result calculated from a fixed demo price series; not investment advice.",
     )

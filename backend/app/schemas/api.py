@@ -1,23 +1,28 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from app.core.time import ensure_utc
 
+Ticker = Annotated[str, Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-]+$")]
+
 
 class UTCModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("generated_at", "occurs_at", "as_of", "published_at", check_fields=False)
+    @field_validator(
+        "generated_at", "occurs_at", "as_of", "published_at", "price_updated_at",
+        check_fields=False,
+    )
     @classmethod
     def normalize_dates(cls, value: datetime) -> datetime:
         return ensure_utc(value)
 
 
 class AssetSummary(UTCModel):
-    symbol: str
+    symbol: Ticker
     name: str
     asset_type: str
     currency: str
@@ -35,7 +40,7 @@ class AssetDetail(AssetSummary):
 
 
 class RecommendationView(UTCModel):
-    symbol: str
+    symbol: Ticker
     rating: Literal["BUY", "HOLD", "SELL"]
     score: Decimal
     rationale: str
@@ -44,7 +49,7 @@ class RecommendationView(UTCModel):
 
 
 class PositionBase(BaseModel):
-    symbol: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-]+$")
+    symbol: Ticker
     quantity: Decimal = Field(gt=0, decimal_places=8)
     average_purchase_price: Decimal = Field(gt=0, decimal_places=6)
     purchase_date: date
@@ -85,11 +90,15 @@ class PositionView(PositionBase):
     id: int
     sector: str
     geography: str
-    current_price: Decimal
-    current_value: Decimal
+    current_price: Decimal | None
+    current_value: Decimal | None
     invested_capital: Decimal
-    unrealized_pnl: Decimal
-    return_percent: Decimal
+    unrealized_pnl: Decimal | None
+    return_percent: Decimal | None
+    is_valued: bool
+    price_source: str | None
+    price_updated_at: datetime | None
+    price_is_stale: bool | None
 
 
 class AllocationItem(BaseModel):
@@ -126,7 +135,7 @@ class StressScenario(BaseModel):
 class NewsImpact(UTCModel):
     title: str
     published_at: datetime
-    affected_symbols: list[str]
+    affected_symbols: list[Ticker]
     impact: Literal["positive", "neutral", "negative"]
     summary: str
 
@@ -136,6 +145,8 @@ class PortfolioView(UTCModel):
     base_currency: str
     current_value: Decimal
     invested_capital: Decimal
+    recorded_invested_capital: Decimal
+    unvalued_positions_count: int
     unrealized_pnl: Decimal
     total_return_percent: Decimal
     as_of: datetime
@@ -162,7 +173,7 @@ class PoliticalEventView(UTCModel):
     region: str
     impact: Literal["high", "medium", "low"]
     summary: str
-    affected_assets: list[str]
+    affected_assets: list[Ticker]
     occurs_at: datetime
 
 
@@ -177,7 +188,7 @@ class DashboardSummary(BaseModel):
 
 
 class BacktestRequest(BaseModel):
-    symbol: str = Field(min_length=1, max_length=16)
+    symbol: Ticker
     initial_capital: Decimal = Field(default=Decimal("10000.00"), gt=0)
     short_window: int = Field(default=10, ge=2, le=100)
     long_window: int = Field(default=30, ge=3, le=250)
@@ -191,9 +202,9 @@ class BacktestRequest(BaseModel):
 
 
 class BacktestResult(BaseModel):
-    symbol: str
+    symbol: Ticker
     total_return_percent: Decimal
     max_drawdown_percent: Decimal
     sharpe_ratio: Decimal
-    trades: int
+    signals: int
     note: str

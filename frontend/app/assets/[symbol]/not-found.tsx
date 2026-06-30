@@ -1,6 +1,5 @@
 import Link from "next/link";
 
 export default function AssetNotFound() {
-  return <section className="empty-state"><span>404</span><h1>Asset not found</h1><p>The symbol is not part of the demonstration coverage universe.</p><Link href="/assets" className="primary-button">Return to assets</Link></section>;
+  return <section className="empty-state"><span>404</span><h1>Актив не найден</h1><p>Этот тикер отсутствует в демонстрационном списке активов.</p><Link href="/assets" className="primary-button">Вернуться к активам</Link></section>;
 }
-

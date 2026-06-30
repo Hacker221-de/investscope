@@ -1,4 +1,4 @@
-from app.models.asset import Asset, PricePoint
+from app.models.asset import Asset, MarketBar
 from app.models.events import PoliticalEvent
 from app.models.portfolio import Portfolio, Position
 from app.models.recommendation import Recommendation
@@ -8,6 +8,6 @@ __all__ = [
     "PoliticalEvent",
     "Portfolio",
     "Position",
-    "PricePoint",
+    "MarketBar",
     "Recommendation",
 ]

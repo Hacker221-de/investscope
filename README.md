@@ -1,8 +1,6 @@
 # InvestScope
 
-InvestScope — каркас веб-приложения для инвестиционных исследований и анализа активов, которыми пользователь фактически владеет и вводит вручную.
-
-> InvestScope анализирует введённые пользователем позиции, но не подключается к брокеру и не совершает сделки.
+InvestScope — аналитическое приложение для исследования активов и позиций, которые пользователь вводит вручную. Приложение не подключается к брокеру, не создаёт торговые поручения и не совершает сделки.
 
 ## Стек
 
@@ -24,108 +22,100 @@ docker compose up --build
 - Swagger: <http://localhost:8000/docs>
 - health: <http://localhost:8000/health>
 
-Локальный backend:
+Локальные проверки:
 
 ```bash
 cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 pytest
-uvicorn app.main:app --reload
-```
+python -m alembic -c alembic.ini upgrade head --sql
 
-Локальный frontend:
-
-```bash
-cd frontend
+cd ../frontend
 npm install
 npm run build
-npm run dev
 ```
 
-## Структура
+## Рыночные данные
+
+`MarketDataProvider` отделяет аналитику и persistence от конкретного источника. Реализованы:
+
+- `DemoMarketDataProvider` — детерминированные данные для разработки;
+- `AlphaVantageMarketDataProvider` — внешний read-only источник Alpha Vantage.
+
+Выбор источника:
+
+```dotenv
+INVESTSCOPE_MARKET_DATA_PROVIDER=alpha_vantage
+INVESTSCOPE_ALPHA_VANTAGE_API_KEY=your-key
+```
+
+Ключ хранится только в окружении. Alpha Vantage free tier ограничен 25 запросами в день. `TIME_SERIES_DAILY` в режиме `compact` возвращает последние 100 наблюдений; полный ряд и adjusted daily data могут требовать premium-доступ. `GLOBAL_QUOTE` без premium-доступа обновляется в конце торгового дня. Подробнее: <https://www.alphavantage.co/documentation/> и <https://www.alphavantage.co/support/>.
+
+Поддерживается таймфрейм `1d`. Alpha Vantage не сообщает точный `published_at` для каждой дневной строки, поэтому это поле остаётся `NULL`; `received_at` содержит фактическое UTC-время получения InvestScope. Значения `adjusted_close` также не подменяются обычным close.
+
+## API рыночных данных
+
+- `GET /api/assets`
+- `GET /api/assets/{symbol}`
+- `GET /api/market/{symbol}/history`
+- `GET /api/market/{symbol}/latest`
+- `POST /api/market/{symbol}/sync?start=2026-01-01&end=2026-06-30&timeframe=1d`
+
+`POST sync` валидирует ASCII-тикер, запрещает будущие даты, ограничивает диапазон 366 днями и возвращает `inserted`, `updated`, `rejected`. Повторная синхронизация идемпотентна. Timeout, rate limit, неизвестный тикер и ошибка источника преобразуются в понятные HTTP-ответы. Endpoint только читает рыночные данные и записывает их в PostgreSQL.
+
+`latest`, `history`, список Assets и Asset details по умолчанию читают бары только из `INVESTSCOPE_MARKET_DATA_PROVIDER`. Более новая запись другого источника не участвует в цене, предыдущем закрытии или графике. Для диагностического явного выбора поддерживается:
 
 ```text
-investscope/
-├── backend/
-│   ├── alembic/                 # схема PostgreSQL
-│   ├── app/
-│   │   ├── api/                 # FastAPI routes
-│   │   ├── core/                # settings, database, UTC helpers
-│   │   ├── models/              # SQLAlchemy models
-│   │   ├── schemas/             # Pydantic contracts
-│   │   ├── modules/portfolio/   # owned-position analytics
-│   │   └── demo_data.py         # deterministic market fixtures
-│   └── tests/
-├── frontend/
-│   ├── app/portfolio/           # portfolio analysis page
-│   ├── components/portfolio-manager.tsx
-│   └── lib/
-├── AGENTS.md
-└── docker-compose.yml
+GET /api/market/AAPL/latest?provider=demo
+GET /api/market/AAPL/history?provider=alpha_vantage
 ```
+
+Frontend не передаёт override и поэтому Assets, Asset Analysis и Portfolio всегда используют настроенный backend-провайдер.
+
+Безопасная очистка demo-баров сначала работает как dry run:
+
+```bash
+python -m app.commands.market_data purge-demo-bars
+python -m app.commands.market_data purge-demo-bars --confirm
+```
+
+Команда с `--confirm` удаляет только строки `market_bars` с точным `provider = 'demo'`. Assets, позиции и бары `alpha_vantage` не изменяются.
+
+Котировка считается устаревшей, если `published_at` (или `event_time`, когда источник не сообщает время публикации) старше 36 часов. Порог задаётся `INVESTSCOPE_MARKET_DATA_STALE_AFTER_HOURS`.
+
+## Инварианты хранения
+
+- все `datetime` timezone-aware и нормализованы в UTC;
+- цены и денежные значения в Python представлены `Decimal`, в PostgreSQL — `NUMERIC`;
+- отсутствующие значения сохраняются как `NULL`, а не как нули;
+- `volume >= 0`;
+- `high >= open, close, low` и `low <= open, close, high` для присутствующих значений;
+- уникальность бара: `asset_id + timeframe + event_time + provider`;
+- некорректные строки отклоняются, учитываются в `rejected` и журналируются;
+- данные будущего не принимаются sync endpoint.
 
 ## Portfolio
 
-Раздел `/portfolio` предназначен для учёта фактически принадлежащих пользователю активов. Для позиции указываются:
+Раздел `/portfolio` анализирует фактически принадлежащие пользователю активы. Пользователь вводит `symbol`, `quantity`, `average_purchase_price`, `purchase_date`, `currency` и необязательную `fees`, либо импортирует CSV.
 
-- `symbol`;
-- `quantity`;
-- `average_purchase_price`;
-- `purchase_date`;
-- `currency`;
-- `fees` — необязательно.
+Текущая стоимость рассчитывается только по доступным сохранённым котировкам. Для каждой позиции показаны источник и UTC-время получения. Позиция без цены отмечается как неоценённая и исключается из суммарной доходности; количество таких позиций выводится отдельно.
 
-Доступны добавление, изменение и удаление позиций, а также импорт UTF-8 CSV. Заголовок CSV:
+## Оставшиеся демонстрационные данные
 
-```csv
-symbol,quantity,average_purchase_price,purchase_date,currency,fees
-AAPL,10,185.25,2025-04-12,USD,4.50
-```
+- справочник четырёх активов в UI до первой синхронизации;
+- начальные вручную редактируемые позиции AAPL, MSFT и TLT в frontend;
+- сводные цены на Dashboard и в карточках аналитических рейтингов;
+- фундаментальные показатели, расчётная стоимость и аналитические рейтинги;
+- политические события и новостное влияние;
+- волатильность, просадка, корреляции и стресс-сценарии Portfolio;
+- исторический ряд Backtesting;
+- legacy endpoints `/api/v1/*` и manual position storage пока используют in-memory fixtures.
 
-Аналитический ответ содержит текущую стоимость, вложенный капитал, нереализованный результат, доходность, распределения по активам/секторам/валютам, концентрацию, волатильность, максимальную просадку, корреляции, политические и географические риски, стресс-сценарии и влияние новостей.
-
-## API
-
-- `GET /health`
-- `GET /api/v1/dashboard`
-- `GET /api/v1/assets`
-- `GET /api/v1/assets/{symbol}`
-- `GET /api/v1/recommendations`
-- `GET /api/v1/portfolio`
-- `POST /api/v1/portfolio/positions`
-- `PATCH /api/v1/portfolio/positions/{position_id}`
-- `DELETE /api/v1/portfolio/positions/{position_id}`
-- `POST /api/v1/portfolio/import-csv`
-- `GET /api/v1/political-events`
-- `POST /api/v1/backtesting/run`
-
-API не содержит методов создания торговых поручений или исполнения сделок.
-
-## Инварианты данных
-
-- Все `datetime` содержат timezone и нормализуются в UTC.
-- `purchase_date` хранится как календарная SQL `DATE`, без неоднозначности часового пояса.
-- Денежные значения и количества в Python используют `Decimal`, в PostgreSQL — `NUMERIC`.
-- Позиция хранит данные пользователя; текущая цена и аналитические атрибуты присоединяются отдельно.
-- Строгая типизация включена для Python-контрактов и TypeScript.
-
-## Тесты
-
-```bash
-cd backend
-pytest
-```
-
-Проверяются health endpoint, ручной CRUD позиций, CSV-импорт, UTC, Decimal-арифметика и все основные аналитические блоки Portfolio.
+Демонстрационные цены больше не используются для текущей цены на страницах Assets, Asset Analysis и Portfolio. При отсутствии сохранённой котировки UI показывает «Нет данных» без ложного нуля.
 
 ## Ограничения
 
-- Рыночные цены, новости, события, коэффициенты корреляции и исторические ряды пока демонстрационные.
-- API хранит изменения позиций в памяти процесса; SQLAlchemy-модели и миграция подготовлены для подключения постоянного repository-слоя.
-- Аналитика поддерживает только символы, присутствующие в текущем демонстрационном справочнике активов.
-- Пересчёт валют в базовую валюту пока не реализован.
-- Нет аутентификации, ролей, фоновых задач, кэша и rate limiting.
-- Стресс-тесты и новостное влияние являются прозрачными сценариями, а не прогнозом.
-- Приложение не интегрируется с брокерами, биржами или системами исполнения сделок.
+- нет аутентификации и фонового scheduler для синхронизации;
+- нет конвертации валют портфеля;
+- нет корпоративных действий и adjusted prices в бесплатной конфигурации Alpha Vantage;
+- нет брокерских API, Buy/Sell, paper trading, поручений и автоматических сделок.

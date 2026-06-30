@@ -1,0 +1,81 @@
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from app.core.time import ensure_utc
+
+
+class MarketUTCModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator(
+        "created_at", "updated_at", "event_time", "published_at", "received_at",
+        check_fields=False,
+    )
+    @classmethod
+    def normalize_utc(cls, value: datetime | None) -> datetime | None:
+        return ensure_utc(value) if value is not None else None
+
+
+class QuoteView(MarketUTCModel):
+    close: Decimal
+    previous_close: Decimal | None
+    change: Decimal | None
+    change_percent: Decimal | None
+    currency: str
+    source: str
+    event_time: datetime
+    published_at: datetime | None
+    received_at: datetime
+    is_stale: bool
+
+
+class AssetView(MarketUTCModel):
+    id: int
+    symbol: str
+    name: str
+    asset_type: str
+    exchange: str | None
+    sector: str | None
+    industry: str | None
+    currency: str
+    provider_symbol: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    latest_quote: QuoteView | None = None
+
+
+class MarketBarView(MarketUTCModel):
+    timeframe: str
+    event_time: datetime
+    open: Decimal | None
+    high: Decimal | None
+    low: Decimal | None
+    close: Decimal | None
+    adjusted_close: Decimal | None
+    volume: int | None
+    provider: str
+    published_at: datetime | None
+    received_at: datetime
+
+
+class MarketHistoryView(BaseModel):
+    symbol: str
+    timeframe: str
+    provider: str
+    bars: list[MarketBarView]
+
+
+class LatestMarketView(BaseModel):
+    symbol: str
+    quote: QuoteView
+
+
+class MarketSyncView(BaseModel):
+    symbol: str
+    provider: str
+    inserted: int
+    updated: int
+    rejected: int
