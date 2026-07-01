@@ -71,6 +71,34 @@ export interface MarketBar {
   received_at: string;
 }
 
+export interface MarketSyncResult {
+  provider: string;
+  symbol: string;
+  inserted: number;
+  updated: number;
+  rejected: number;
+  skipped: boolean;
+  reason: string | null;
+  skip_reason: string | null;
+  latest_event_time: string | null;
+  latest_received_at: string | null;
+  requests_used_today: number;
+  daily_limit: number | null;
+  received_at: string;
+}
+
+export interface ProviderMarketDataStatus {
+  configured_provider: string;
+  available: boolean;
+  requests_used_today: number;
+  daily_limit: number | null;
+  remaining_requests: number | null;
+  last_request_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  data_stale_after_hours: number;
+}
+
 export interface PoliticalEvent {
   date: string;
   time: string;

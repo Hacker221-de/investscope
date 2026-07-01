@@ -67,6 +67,10 @@ class HistoricalBarsResult(BaseModel):
 
 class MarketDataProvider(ABC):
     name: str
+    gateway_managed: bool = False
+
+    def begin_request_group(self, request_group_id: str) -> None:
+        """Set request correlation for providers with a managed transport."""
 
     @abstractmethod
     async def get_asset_metadata(self, symbol: str) -> ProviderAssetMetadata:
@@ -96,6 +100,29 @@ class ProviderTimeoutError(MarketDataProviderError):
 
 
 class ProviderRateLimitError(MarketDataProviderError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: int | None = None,
+        requests_used_today: int | None = None,
+        daily_limit: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+        self.requests_used_today = requests_used_today
+        self.daily_limit = daily_limit
+
+
+class ProviderBurstLimitError(ProviderRateLimitError):
+    pass
+
+
+class ProviderDailyLimitError(ProviderRateLimitError):
+    pass
+
+
+class ProviderInvalidRequestError(MarketDataProviderError):
     pass
 
 

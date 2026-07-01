@@ -79,3 +79,23 @@ class MarketSyncView(BaseModel):
     inserted: int
     updated: int
     rejected: int
+    skipped: bool
+    reason: str | None
+    skip_reason: str | None
+    latest_event_time: datetime | None
+    latest_received_at: datetime | None
+    requests_used_today: int
+    daily_limit: int | None
+    received_at: datetime
+
+
+class ProviderMarketDataStatusView(BaseModel):
+    configured_provider: str
+    available: bool
+    requests_used_today: int
+    daily_limit: int | None
+    remaining_requests: int | None
+    last_request_at: datetime | None
+    last_success_at: datetime | None
+    last_error: str | None
+    data_stale_after_hours: int

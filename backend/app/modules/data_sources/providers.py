@@ -2,8 +2,8 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from uuid import uuid4
 
-import httpx
 from pydantic import ValidationError
 
 from app.core.time import utc_now
@@ -13,14 +13,12 @@ from app.modules.data_sources.contracts import (
     MarketDataProvider,
     MarketDataProviderError,
     ProviderAssetMetadata,
-    ProviderConfigurationError,
     ProviderMarketBar,
-    ProviderRateLimitError,
     ProviderSymbolNotFoundError,
-    ProviderTimeoutError,
     Timeframe,
     event_time_for,
 )
+from app.modules.data_sources.gateway import AlphaVantageRequestGateway
 
 logger = logging.getLogger(__name__)
 
@@ -81,42 +79,30 @@ class AlphaVantageMarketDataProvider(MarketDataProvider):
     """Read-only Alpha Vantage adapter. It never submits orders or connects to a broker."""
 
     name = "alpha_vantage"
+    gateway_managed = True
 
-    def __init__(self, api_key: str, base_url: str, timeout_seconds: float = 10.0,
-                 client: httpx.AsyncClient | None = None) -> None:
-        if not api_key:
-            raise ProviderConfigurationError("Alpha Vantage API key is not configured")
-        self.api_key = api_key
-        self.base_url = base_url
-        self.timeout_seconds = timeout_seconds
-        self.client = client
+    def __init__(self, gateway: AlphaVantageRequestGateway) -> None:
+        self.gateway = gateway
+        self.request_group_id = str(uuid4())
 
-    async def _request(self, **params: str) -> dict[str, Any]:
-        request_params = {**params, "apikey": self.api_key}
-        try:
-            if self.client is not None:
-                response = await self.client.get(self.base_url, params=request_params)
-            else:
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                    response = await client.get(self.base_url, params=request_params)
-            response.raise_for_status()
-        except httpx.TimeoutException as error:
-            raise ProviderTimeoutError("Alpha Vantage request timed out") from error
-        except httpx.HTTPError as error:
-            raise MarketDataProviderError("Alpha Vantage request failed") from error
-        try:
-            payload = response.json()
-        except ValueError as error:
-            raise MarketDataProviderError("Alpha Vantage returned invalid JSON") from error
-        if payload.get("Note") or payload.get("Information"):
-            raise ProviderRateLimitError(str(payload.get("Note") or payload.get("Information")))
-        if payload.get("Error Message"):
-            raise ProviderSymbolNotFoundError(str(payload["Error Message"]))
-        return payload
+    def begin_request_group(self, request_group_id: str) -> None:
+        self.request_group_id = request_group_id
+
+    async def _request(
+        self, *, endpoint: str, log_symbol: str, **params: str
+    ) -> dict[str, Any]:
+        return await self.gateway.request(
+            endpoint=endpoint,
+            symbol=log_symbol,
+            request_group_id=self.request_group_id,
+            params={"function": endpoint, **params},
+        )
 
     async def get_asset_metadata(self, symbol: str) -> ProviderAssetMetadata:
         normalized = symbol.upper()
-        payload = await self._request(function="SYMBOL_SEARCH", keywords=normalized)
+        payload = await self._request(
+            endpoint="SYMBOL_SEARCH", log_symbol=normalized, keywords=normalized
+        )
         matches = payload.get("bestMatches", [])
         match = next((item for item in matches if item.get("1. symbol", "").upper() == normalized), None)
         if match is None:
@@ -153,7 +139,10 @@ class AlphaVantageMarketDataProvider(MarketDataProvider):
         if timeframe != Timeframe.DAY_1:
             raise MarketDataProviderError("Alpha Vantage adapter currently supports only 1d bars")
         payload = await self._request(
-            function="TIME_SERIES_DAILY", symbol=symbol.upper(), outputsize="compact",
+            endpoint="TIME_SERIES_DAILY",
+            log_symbol=symbol.upper(),
+            symbol=symbol.upper(),
+            outputsize="compact",
         )
         series = payload.get("Time Series (Daily)")
         if not isinstance(series, dict):
@@ -173,7 +162,11 @@ class AlphaVantageMarketDataProvider(MarketDataProvider):
         return HistoricalBarsResult(bars=bars, rejected_count=rejected)
 
     async def get_latest_bar(self, symbol: str) -> ProviderMarketBar | None:
-        payload = await self._request(function="GLOBAL_QUOTE", symbol=symbol.upper())
+        payload = await self._request(
+            endpoint="GLOBAL_QUOTE",
+            log_symbol=symbol.upper(),
+            symbol=symbol.upper(),
+        )
         quote = payload.get("Global Quote")
         if not isinstance(quote, dict) or not quote.get("07. latest trading day"):
             return None

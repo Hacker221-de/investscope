@@ -47,6 +47,10 @@ npm run build
 ```dotenv
 INVESTSCOPE_MARKET_DATA_PROVIDER=alpha_vantage
 INVESTSCOPE_ALPHA_VANTAGE_API_KEY=your-key
+INVESTSCOPE_ALPHA_VANTAGE_BASE_URL=https://www.alphavantage.co/query
+INVESTSCOPE_ALPHA_VANTAGE_DAILY_LIMIT=25
+INVESTSCOPE_ALPHA_VANTAGE_DAILY_RESERVE=1
+INVESTSCOPE_ALPHA_VANTAGE_MIN_INTERVAL_SECONDS=1.5
 ```
 
 Ключ хранится только в окружении. Alpha Vantage free tier ограничен 25 запросами в день. `TIME_SERIES_DAILY` в режиме `compact` возвращает последние 100 наблюдений; полный ряд и adjusted daily data могут требовать premium-доступ. `GLOBAL_QUOTE` без premium-доступа обновляется в конце торгового дня. Подробнее: <https://www.alphavantage.co/documentation/> и <https://www.alphavantage.co/support/>.
@@ -82,6 +86,37 @@ python -m app.commands.market_data purge-demo-bars --confirm
 Команда с `--confirm` удаляет только строки `market_bars` с точным `provider = 'demo'`. Assets, позиции и бары `alpha_vantage` не изменяются.
 
 Котировка считается устаревшей, если `published_at` (или `event_time`, когда источник не сообщает время публикации) старше 36 часов. Порог задаётся `INVESTSCOPE_MARKET_DATA_STALE_AFTER_HOURS`.
+
+### Защита лимита провайдера
+
+Перед `POST /api/market/{symbol}/sync` проверяется последний сохранённый бар настроенного провайдера. Если `published_at` или, при его отсутствии, `event_time` моложе порога freshness, endpoint возвращает `skipped=true`, `reason=skip_reason="fresh_data"` и не вызывает provider.
+
+Для Alpha Vantage каждый фактический HTTP-запрос записывается в `provider_request_logs`. Новая синхронизация существующего актива требует два запроса, нового актива — три; доступность всего request group проверяется заранее. Действуют следующие ограничения:
+
+- каждый HTTP-вызов проходит через единый `AlphaVantageRequestGateway`;
+- между началами отдельных вызовов выдерживается минимум 1,5 секунды по monotonic clock;
+- общая async-блокировка сериализует задачи внутри процесса;
+- PostgreSQL transaction-level advisory lock сериализует workers между процессами;
+- дневной лимит задаётся `INVESTSCOPE_ALPHA_VANTAGE_DAILY_LIMIT`;
+- один запрос по умолчанию сохраняется как резерв;
+- после 429 автоматического retry нет, повтор блокируется до истечения `Retry-After` или настроенного cooldown;
+- API-ключ остаётся только в backend environment и не записывается в логи или БД.
+
+Статус без секретов доступен через:
+
+```text
+GET /api/providers/market-data/status
+```
+
+Он содержит настроенный provider, дневное использование, остаток, последние запрос/успех/ошибку и freshness threshold. Settings отображает эти данные, но не получает API-ключ. Синхронизация на Asset Analysis запускается только вручную.
+
+Ответ при исчерпании бюджета или внешнем 429 имеет HTTP-код `429` и стабильную структуру `detail`. Технический текст провайдера и traceback клиенту не передаются.
+
+Ошибки лимитов разделены: `provider_burst_limit` для краткосрочного 429, `provider_daily_limit` для дневного бюджета и `provider_rate_limit` только для неизвестного варианта. Если использовано меньше дневного лимита, API сообщает: «Действует временное ограничение частоты запросов».
+
+Каждый реальный HTTP-вызов журналируется отдельно с `endpoint`, `requested_at`, `started_at`, `completed_at`, HTTP status, результатом, типом ошибки, `retry_after_seconds` и общим `request_group_id`. UTC используется только в журнале; продолжительность throttle рассчитывается через `time.monotonic()`.
+
+Для `TIME_SERIES_DAILY` gateway применяет строгий внешний allowlist: `function`, `symbol`, `outputsize=compact`, `datatype=json` и `apikey`. `timeframe`, диапазон дат и служебные параметры InvestScope не передаются провайдеру; `start/end` фильтруются после получения дневного ряда. В безопасный application log попадают только function, symbol, outputsize и datatype. Ответ Alpha Vantage с `Error Message` преобразуется в HTTP 502 с `detail.code="provider_invalid_request"`.
 
 ## Инварианты хранения
 

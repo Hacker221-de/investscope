@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: SecretStr | None = None
     alpha_vantage_base_url: str = "https://www.alphavantage.co/query"
     market_data_timeout_seconds: float = 10.0
+    alpha_vantage_daily_limit: int = 25
+    alpha_vantage_daily_reserve: int = 1
+    alpha_vantage_min_interval_seconds: float = 1.5
+    alpha_vantage_rate_limit_cooldown_seconds: int = 60
     market_sync_max_days: int = 366
     market_data_stale_after_hours: int = 36
 

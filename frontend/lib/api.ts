@@ -9,10 +9,17 @@ export async function fetchFromApi<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function fetchMarketApi<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_ROOT}/api${path}`, { cache: "no-store" });
+export class MarketApiError extends Error {
+  constructor(public status: number, public detail: unknown) {
+    super(`Market data request failed with status ${status}`);
+  }
+}
+
+export async function fetchMarketApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_ROOT}/api${path}`, { cache: "no-store", ...init });
   if (!response.ok) {
-    throw new Error(`Market data request failed with status ${response.status}`);
+    const payload = await response.json().catch(() => null) as { detail?: unknown } | null;
+    throw new MarketApiError(response.status, payload?.detail);
   }
   return response.json() as Promise<T>;
 }

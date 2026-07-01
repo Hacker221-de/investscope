@@ -14,12 +14,17 @@ from app.modules.data_sources import (
     DemoMarketDataProvider,
     MarketDataProvider,
     MarketDataProviderError,
+    ProviderBurstLimitError,
     ProviderConfigurationError,
+    ProviderDailyLimitError,
+    ProviderInvalidRequestError,
     ProviderRateLimitError,
     ProviderSymbolNotFoundError,
     ProviderTimeoutError,
     Timeframe,
 )
+from app.modules.data_sources.gateway import AlphaVantageRequestGateway
+from app.modules.data_sources.limits import ProviderBudget, ProviderRequestCoordinator
 from app.modules.data_sources.sync import synchronize_market_data
 from app.repositories import MarketDataRepository
 from app.schemas.market_data import (
@@ -28,6 +33,7 @@ from app.schemas.market_data import (
     MarketBarView,
     MarketHistoryView,
     MarketSyncView,
+    ProviderMarketDataStatusView,
     QuoteView,
 )
 
@@ -37,18 +43,31 @@ PROVIDER_PATTERN = re.compile(r"^[a-z0-9_\-]{1,40}$")
 SUPPORTED_PROVIDERS = {"demo", "alpha_vantage"}
 
 
-def get_market_data_provider(settings: Annotated[Settings, Depends(get_settings)]) -> MarketDataProvider:
+def get_market_data_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[Session, Depends(get_db)],
+) -> MarketDataProvider:
     provider_name = _provider_name(settings.market_data_provider)
     if provider_name == "alpha_vantage":
         key = settings.alpha_vantage_api_key.get_secret_value() if settings.alpha_vantage_api_key else ""
-        return AlphaVantageMarketDataProvider(
+        coordinator = ProviderRequestCoordinator(session, settings)
+        gateway = AlphaVantageRequestGateway(
             api_key=key,
             base_url=settings.alpha_vantage_base_url,
             timeout_seconds=settings.market_data_timeout_seconds,
+            coordinator=coordinator,
         )
+        return AlphaVantageMarketDataProvider(gateway)
     if provider_name == "demo":
         return DemoMarketDataProvider()
     raise ProviderConfigurationError(f"Unsupported market data provider: {provider_name}")
+
+
+def get_provider_request_coordinator(
+    session: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProviderRequestCoordinator:
+    return ProviderRequestCoordinator(session, settings)
 
 
 def _symbol(value: str) -> str:
@@ -112,6 +131,37 @@ def _asset_view(
     return view.model_copy(update={
         "latest_quote": _quote(repository, view.id, view.currency, settings, provider),
     })
+
+
+def _sync_view(
+    *,
+    symbol: str,
+    provider: str,
+    inserted: int,
+    updated: int,
+    rejected: int,
+    skipped: bool,
+    skip_reason: str | None,
+    budget: ProviderBudget,
+    received_at: datetime,
+    latest_event_time: datetime | None = None,
+    latest_received_at: datetime | None = None,
+) -> MarketSyncView:
+    return MarketSyncView(
+        provider=provider,
+        symbol=symbol,
+        inserted=inserted,
+        updated=updated,
+        rejected=rejected,
+        skipped=skipped,
+        reason=skip_reason,
+        skip_reason=skip_reason,
+        latest_event_time=latest_event_time,
+        latest_received_at=latest_received_at,
+        requests_used_today=budget.requests_used_today,
+        daily_limit=budget.daily_limit,
+        received_at=received_at,
+    )
 
 
 @router.get("/assets", response_model=list[AssetView])
@@ -193,11 +243,52 @@ def latest_market_quote(
     return LatestMarketView(symbol=normalized, quote=quote)
 
 
+@router.get("/providers/market-data/status", response_model=ProviderMarketDataStatusView)
+def provider_market_data_status(
+    settings: Annotated[Settings, Depends(get_settings)],
+    coordinator: Annotated[
+        ProviderRequestCoordinator, Depends(get_provider_request_coordinator)
+    ],
+) -> ProviderMarketDataStatusView:
+    provider = _selected_provider(settings)
+    budget = coordinator.budget(provider)
+    if provider == "alpha_vantage":
+        key_available = bool(
+            settings.alpha_vantage_api_key
+            and settings.alpha_vantage_api_key.get_secret_value()
+        )
+        usable_limit = max(
+            (budget.daily_limit or 0) - settings.alpha_vantage_daily_reserve,
+            0,
+        )
+        available = (
+            key_available
+            and budget.requests_used_today < usable_limit
+            and budget.retry_after_seconds is None
+        )
+    else:
+        available = True
+    return ProviderMarketDataStatusView(
+        configured_provider=provider,
+        available=available,
+        requests_used_today=budget.requests_used_today,
+        daily_limit=budget.daily_limit,
+        remaining_requests=budget.remaining_requests,
+        last_request_at=budget.last_request_at,
+        last_success_at=budget.last_success_at,
+        last_error=budget.last_error,
+        data_stale_after_hours=settings.market_data_stale_after_hours,
+    )
+
+
 @router.post("/market/{symbol}/sync", response_model=MarketSyncView)
 async def sync_market_data(
     symbol: str,
     session: Annotated[Session, Depends(get_db)],
     provider: Annotated[MarketDataProvider, Depends(get_market_data_provider)],
+    coordinator: Annotated[
+        ProviderRequestCoordinator, Depends(get_provider_request_coordinator)
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
     start: Annotated[date | None, Query()] = None,
     end: Annotated[date | None, Query()] = None,
@@ -215,26 +306,107 @@ async def sync_market_data(
             status_code=422,
             detail=f"date range cannot exceed {settings.market_sync_max_days} days",
         )
+    repository = MarketDataRepository(session)
+    asset = repository.get_asset(normalized)
+    latest = repository.latest(asset.id, provider.name, timeframe) if asset is not None else None
+    if latest is not None:
+        reference = latest.published_at or latest.event_time
+        if not _stale(reference, settings):
+            return _sync_view(
+                symbol=normalized,
+                provider=provider.name,
+                inserted=0,
+                updated=0,
+                rejected=0,
+                skipped=True,
+                skip_reason="fresh_data",
+                budget=coordinator.budget(provider.name),
+                received_at=utc_now(),
+                latest_event_time=latest.event_time,
+                latest_received_at=latest.received_at,
+            )
     try:
+        coordinator.ensure_capacity(provider.name, 2 if asset is not None else 3)
         result = await synchronize_market_data(
-            session, provider, normalized, start_date, end_date, timeframe,
+            session,
+            provider,
+            normalized,
+            start_date,
+            end_date,
+            timeframe,
+            coordinator,
         )
     except ProviderTimeoutError as error:
         session.rollback()
         raise HTTPException(status_code=504, detail=str(error)) from error
     except ProviderRateLimitError as error:
         session.rollback()
-        raise HTTPException(status_code=429, detail=str(error)) from error
+        budget = coordinator.budget(provider.name)
+        requests_used = (
+            error.requests_used_today
+            if error.requests_used_today is not None
+            else budget.requests_used_today
+        )
+        daily_limit = (
+            error.daily_limit if error.daily_limit is not None else budget.daily_limit
+        )
+        if isinstance(error, ProviderBurstLimitError):
+            error_code = "provider_burst_limit"
+            message = "Действует временное ограничение частоты запросов"
+        elif isinstance(error, ProviderDailyLimitError):
+            error_code = "provider_daily_limit"
+            message = (
+                "Суточный лимит запросов провайдера исчерпан"
+                if daily_limit is not None and requests_used >= daily_limit
+                else "Действует временное ограничение частоты запросов"
+            )
+        else:
+            error_code = "provider_rate_limit"
+            message = "Провайдер временно ограничил запросы"
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": error_code,
+                "provider": provider.name,
+                "message": message,
+                "retry_after_seconds": error.retry_after_seconds,
+                "requests_used_today": requests_used,
+                "daily_limit": daily_limit,
+            },
+        ) from error
+    except ProviderInvalidRequestError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "provider_invalid_request",
+                "provider": provider.name,
+                "message": "Провайдер отклонил параметры запроса",
+            },
+        ) from error
     except ProviderSymbolNotFoundError as error:
         session.rollback()
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (ProviderConfigurationError, MarketDataProviderError) as error:
         session.rollback()
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return MarketSyncView(
+    latest = repository.latest(asset.id, provider.name, timeframe) if asset is not None else None
+    if latest is None:
+        refreshed_asset = repository.get_asset(normalized)
+        latest = (
+            repository.latest(refreshed_asset.id, provider.name, timeframe)
+            if refreshed_asset is not None else None
+        )
+    return _sync_view(
         symbol=result.symbol,
         provider=result.provider,
         inserted=result.inserted,
         updated=result.updated,
         rejected=result.rejected,
+        skipped=False,
+        skip_reason=None,
+        budget=coordinator.budget(provider.name),
+        received_at=result.received_at,
+        latest_event_time=latest.event_time if latest is not None else None,
+        latest_received_at=latest.received_at if latest is not None else None,
     )
