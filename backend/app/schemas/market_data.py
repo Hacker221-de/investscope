@@ -28,6 +28,8 @@ class QuoteView(MarketUTCModel):
     event_time: datetime
     published_at: datetime | None
     received_at: datetime
+    is_fetch_stale: bool
+    is_market_data_stale: bool
     is_stale: bool
 
 

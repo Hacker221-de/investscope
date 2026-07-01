@@ -43,6 +43,8 @@ Analytics and API handlers must depend on `MarketDataProvider`, never directly o
 20. Keep Alpha Vantage transport params separate from log metadata. `TIME_SERIES_DAILY` may send only function, symbol, compact outputsize, JSON datatype and the secret key.
 21. Never pass timeframe, date ranges, provider names, request group ids or throttle settings to Alpha Vantage.
 22. Map Alpha Vantage `Error Message` to `provider_invalid_request`/HTTP 502, not to an unknown asset response.
+23. For daily bars, derive fetch freshness from `received_at`; never use midnight `event_time` as a direct age measurement.
+24. Keep `is_fetch_stale` separate from `is_market_data_stale`, and do not expect a new weekday session before configured close or during weekends.
 
 ## Portfolio valuation
 

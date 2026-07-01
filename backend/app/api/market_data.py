@@ -24,6 +24,7 @@ from app.modules.data_sources import (
     Timeframe,
 )
 from app.modules.data_sources.gateway import AlphaVantageRequestGateway
+from app.modules.data_sources.freshness import evaluate_market_data_freshness
 from app.modules.data_sources.limits import ProviderBudget, ProviderRequestCoordinator
 from app.modules.data_sources.sync import synchronize_market_data
 from app.repositories import MarketDataRepository
@@ -97,10 +98,6 @@ def _selected_provider(settings: Settings, override: str | None = None) -> str:
     return _provider_name(override or settings.market_data_provider)
 
 
-def _stale(reference: datetime, settings: Settings) -> bool:
-    return utc_now() - reference > timedelta(hours=settings.market_data_stale_after_hours)
-
-
 def _quote(repository: MarketDataRepository, asset_id: int, currency: str,
            settings: Settings, provider: str) -> QuoteView | None:
     bars = repository.latest_two(asset_id, provider)
@@ -112,12 +109,21 @@ def _quote(repository: MarketDataRepository, asset_id: int, currency: str,
     change_percent = (
         change / previous * Decimal("100") if change is not None and previous != 0 else None
     )
-    reference = latest.published_at or latest.event_time
+    freshness = evaluate_market_data_freshness(
+        timeframe=latest.timeframe,
+        event_time=latest.event_time,
+        received_at=latest.received_at,
+        stale_after_hours=settings.market_data_stale_after_hours,
+        session_close_hour_utc=settings.market_daily_session_close_hour_utc,
+    )
     return QuoteView(
         close=latest.close, previous_close=previous, change=change,
         change_percent=change_percent, currency=currency, source=latest.provider,
         event_time=latest.event_time, published_at=latest.published_at,
-        received_at=latest.received_at, is_stale=_stale(reference, settings),
+        received_at=latest.received_at,
+        is_fetch_stale=freshness.is_fetch_stale,
+        is_market_data_stale=freshness.is_market_data_stale,
+        is_stale=freshness.is_stale,
     )
 
 
@@ -310,8 +316,14 @@ async def sync_market_data(
     asset = repository.get_asset(normalized)
     latest = repository.latest(asset.id, provider.name, timeframe) if asset is not None else None
     if latest is not None:
-        reference = latest.published_at or latest.event_time
-        if not _stale(reference, settings):
+        freshness = evaluate_market_data_freshness(
+            timeframe=latest.timeframe,
+            event_time=latest.event_time,
+            received_at=latest.received_at,
+            stale_after_hours=settings.market_data_stale_after_hours,
+            session_close_hour_utc=settings.market_daily_session_close_hour_utc,
+        )
+        if not freshness.is_stale:
             return _sync_view(
                 symbol=normalized,
                 provider=provider.name,

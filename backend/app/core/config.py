@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     alpha_vantage_rate_limit_cooldown_seconds: int = 60
     market_sync_max_days: int = 366
     market_data_stale_after_hours: int = 36
+    market_daily_session_close_hour_utc: int = 21
 
     model_config = SettingsConfigDict(
         env_file=".env",

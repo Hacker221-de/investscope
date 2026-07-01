@@ -85,7 +85,7 @@ python -m app.commands.market_data purge-demo-bars --confirm
 
 Команда с `--confirm` удаляет только строки `market_bars` с точным `provider = 'demo'`. Assets, позиции и бары `alpha_vantage` не изменяются.
 
-Котировка считается устаревшей, если `published_at` (или `event_time`, когда источник не сообщает время публикации) старше 36 часов. Порог задаётся `INVESTSCOPE_MARKET_DATA_STALE_AFTER_HOURS`.
+Свежесть дневной котировки разделена на два признака. `is_fetch_stale` сравнивает текущее время с фактическим `received_at`; порог задаётся `INVESTSCOPE_MARKET_DATA_STALE_AFTER_HOURS`. `is_market_data_stale` сравнивает дату бара с последней ожидаемой завершённой weekday-сессией. До настроенного закрытия (`INVESTSCOPE_MARKET_DAILY_SESSION_CLOSE_HOUR_UTC`, по умолчанию 21 UTC) ожидается предыдущий рабочий день, а в выходные — пятница. Поэтому `event_time=00:00 UTC` не делает свежий дневной бар устаревшим. Биржевые праздники пока не входят в базовый календарь.
 
 ### Защита лимита провайдера
 

@@ -38,6 +38,8 @@ export interface MarketQuote {
   event_time: string;
   published_at: string | null;
   received_at: string;
+  is_fetch_stale: boolean;
+  is_market_data_stale: boolean;
   is_stale: boolean;
 }
 

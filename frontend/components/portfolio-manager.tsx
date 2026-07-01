@@ -103,7 +103,8 @@ export function PortfolioManager() {
     const invested = position.quantity * position.averagePurchasePrice + (position.fees ?? 0);
     return {
       ...position, currentPrice, currentValue, pnl: currentValue - invested,
-      priceSource: quote.source, priceUpdatedAt: quoteTime(quote), priceIsStale: quote.is_stale,
+      priceSource: quote.source, priceUpdatedAt: quoteTime(quote),
+      priceIsStale: quote.is_fetch_stale || quote.is_market_data_stale,
     };
   });
   const valued = evaluated.filter((position) => position.currentValue !== undefined);

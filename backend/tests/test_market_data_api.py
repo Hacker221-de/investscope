@@ -108,7 +108,10 @@ def test_old_quote_is_marked_stale(market_client: TestClient, db_session: Sessio
     )])
     db_session.commit()
 
-    assert market_client.get("/api/market/OLD/latest").json()["quote"]["is_stale"] is True
+    quote = market_client.get("/api/market/OLD/latest").json()["quote"]
+    assert quote["is_stale"] is True
+    assert quote["is_fetch_stale"] is True
+    assert quote["is_market_data_stale"] is True
 
 
 def test_newer_demo_bar_does_not_override_configured_alpha_vantage(

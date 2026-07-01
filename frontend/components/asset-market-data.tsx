@@ -86,7 +86,7 @@ export function AssetMarketData({ asset }: { asset: Asset }) {
     <>
       <header className="asset-header">
         <div className="ticker-icon large">{asset.symbol.slice(0, 1)}</div>
-        <div><p className="eyebrow">{asset.type === "Equity" ? "Акция" : "Биржевой фонд"}</p><h1>{asset.symbol} <span>{asset.name}</span></h1><p>{quote ? <>Источник: {quote.source} · Обновлено: {updated}{quote.is_stale && <em className="stale-badge">Устарела</em>}</> : loading ? "Загрузка сохранённой котировки…" : "Сохранённая котировка отсутствует"}</p></div>
+        <div><p className="eyebrow">{asset.type === "Equity" ? "Акция" : "Биржевой фонд"}</p><h1>{asset.symbol} <span>{asset.name}</span></h1><p>{quote ? <>Источник: {quote.source} · Загружено: {updated}{quote.is_fetch_stale && <em className="stale-badge">Давно загружено</em>}{quote.is_market_data_stale && <em className="stale-badge">Нет последней завершённой сессии</em>}</> : loading ? "Загрузка сохранённой котировки…" : "Сохранённая котировка отсутствует"}</p></div>
         <div className="asset-quote">{quote ? <><strong>{currency.format(Number(quote.close))}</strong><span className={change === null ? "" : change >= 0 ? "positive" : "negative"}>{change === null ? "Нет предыдущего закрытия" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}% к предыдущему закрытию`}</span></> : <strong className="missing-value">Нет данных</strong>}<button className="secondary-button quote-sync-button" type="button" disabled={syncing} onClick={synchronize}>{syncing ? "Проверка…" : "Обновить данные"}</button></div>
       </header>
       {syncMessage && <p className={`market-message ${syncError ? "error" : ""}`} role="status">{syncMessage}</p>}
