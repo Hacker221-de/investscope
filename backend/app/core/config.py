@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     market_sync_max_days: int = 366
     market_data_stale_after_hours: int = 36
     market_daily_session_close_hour_utc: int = 21
+    sec_user_agent: str = "InvestScope contact@example.com"
+    sec_max_requests_per_second: float = 1.0
+    sec_cache_ttl_hours: int = 24
+    sec_ticker_cache_ttl_hours: int = 168
+    sec_request_timeout_seconds: float = 30.0
+    sec_import_max_file_mb: int = 100
 
     model_config = SettingsConfigDict(
         env_file=".env",

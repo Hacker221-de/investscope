@@ -20,11 +20,24 @@ class Asset(Base):
     sector: Mapped[str | None] = mapped_column(String(80))
     industry: Mapped[str | None] = mapped_column(String(120))
     provider_symbol: Mapped[str | None] = mapped_column(String(32))
+    cik: Mapped[str | None] = mapped_column(String(10), index=True)
+    sec_entity_name: Mapped[str | None] = mapped_column(String(240))
+    sec_exchange: Mapped[str | None] = mapped_column(String(80))
+    sec_last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 
     bars: Mapped[list["MarketBar"]] = relationship(back_populates="asset", cascade="all, delete-orphan")
+    company_profiles: Mapped[list["CompanyProfile"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    filings: Mapped[list["CompanyFiling"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
+    financial_facts: Mapped[list["FinancialFact"]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan"
+    )
 
 
 class MarketBar(Base):

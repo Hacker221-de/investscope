@@ -86,6 +86,27 @@ class MarketDataRepository:
             .limit(1)
         )
 
+    def latest_at_or_before(
+        self,
+        asset_id: int,
+        provider: str,
+        as_of: datetime,
+        timeframe: Timeframe = Timeframe.DAY_1,
+    ) -> MarketBar | None:
+        return self.session.scalar(
+            select(MarketBar)
+            .where(
+                MarketBar.asset_id == asset_id,
+                MarketBar.timeframe == timeframe.value,
+                MarketBar.provider == provider,
+                MarketBar.close.is_not(None),
+                MarketBar.event_time <= as_of,
+                MarketBar.received_at <= as_of,
+            )
+            .order_by(MarketBar.event_time.desc(), MarketBar.received_at.desc())
+            .limit(1)
+        )
+
     def latest_two(
         self,
         asset_id: int,

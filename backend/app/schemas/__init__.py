@@ -13,6 +13,13 @@ from app.schemas.api import (
     PortfolioView,
     RecommendationView,
 )
+from app.schemas.fundamentals import (
+    CompanyFilingView,
+    CompanyProfileView,
+    FinancialFactView,
+    FundamentalSyncView,
+    FundamentalMetricsView,
+)
 
 __all__ = [
     "AllocationItem",
@@ -21,7 +28,12 @@ __all__ = [
     "BacktestRequest",
     "BacktestResult",
     "CSVImportResult",
+    "CompanyFilingView",
+    "CompanyProfileView",
     "DashboardSummary",
+    "FinancialFactView",
+    "FundamentalSyncView",
+    "FundamentalMetricsView",
     "PositionCreate",
     "PositionUpdate",
     "PositionView",
