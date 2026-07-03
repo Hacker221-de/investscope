@@ -15,3 +15,5 @@ frontend/out/
 
 
 .env
+
+output/pytest-*/
