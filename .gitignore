@@ -1,5 +1,11 @@
+# Environment and local configuration
 .env
+.env.*
+!.env.example
+
+# Python
 .venv/
+backend/.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -7,13 +13,32 @@ __pycache__/
 htmlcov/
 backend/dist/
 backend/*.egg-info/
-frontend/node_modules/
-frontend/.next/
+
+# Node.js / Next.js
+node_modules/
+.next/
 frontend/out/
-*.log
-.DS_Store
+*.tsbuildinfo
 
-
-.env
-
+# Test and runtime output
 output/pytest-*/
+*.log
+logs/
+tmp/
+.tmp/
+
+# Local PostgreSQL data directories
+postgres_data/
+data/postgres/
+*.pgdata/
+
+# Local SEC downloads used by the offline importer
+data/sec/**/*.json
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
