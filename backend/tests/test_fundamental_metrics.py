@@ -810,13 +810,37 @@ def test_ttm_uses_derived_q4_and_is_unavailable_without_annual(db_session: Sessi
 
 
 def test_frontend_exposes_derived_badge_formula_and_filing_sources() -> None:
-    component = (
-        Path(__file__).parents[2] / "frontend" / "components" / "fundamental-analysis.tsx"
+    frontend = Path(__file__).parents[2] / "frontend"
+    analysis = (frontend / "components" / "fundamental-analysis.tsx").read_text(
+        encoding="utf-8"
+    )
+    calculation_components = (
+        frontend / "components" / "fundamentals" / "calculation-components.tsx"
     ).read_text(encoding="utf-8")
-    assert "Расчётное значение" in component
-    assert "Рассчитано из годового и квартальных отчётов" in component
-    assert "point.calculation" in component
-    assert "point.source_facts" in component
+    metric_provenance = (
+        frontend / "components" / "fundamentals" / "metric-provenance.tsx"
+    ).read_text(encoding="utf-8")
+    formatters = (frontend / "lib" / "fundamental-formatters.ts").read_text(
+        encoding="utf-8"
+    )
+    types = (frontend / "lib" / "types.ts").read_text(encoding="utf-8")
+
+    assert "point.derived &&" in analysis
+    assert "quality-badge derived" in analysis
+    assert "Расчётное значение" in analysis
+    assert "<CalculationComponents point={point}" in analysis
+    assert "<MetricProvenance point={point}" in analysis
+
+    assert "annual_minus_three_quarters" in formatters
+    assert "point.derivation_method" in calculation_components
+    assert "point.calculation" in calculation_components
+    assert "point.calculation_components" in calculation_components
+
+    assert "point.source_facts" in metric_provenance
+    assert "fact.filing_url" in metric_provenance
+    assert "fact.accession_number" in metric_provenance
+    assert "source_facts: FundamentalProvenanceFact[]" in types
+    assert "calculation_components: FundamentalCalculationComponent[]" in types
 
 
 def test_ttm_api_exposes_calculation_components_schema(

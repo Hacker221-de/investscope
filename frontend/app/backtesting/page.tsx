@@ -1,14 +1,18 @@
-import { MetricCard, PageHeader } from "@/components/ui";
-import { pricePath } from "@/lib/demo-data";
+import { BacktestingWorkbench } from "@/components/backtesting-workbench";
+import { PageHeader } from "@/components/ui";
 
 export const metadata = { title: "Историческое тестирование" };
 
 export default function BacktestingPage() {
   return (
     <>
-      <PageHeader title="Историческое тестирование" description="Проверка аналитических сигналов на исторических данных без моделирования реальных сделок." action={<span className="timestamp">Контроль заглядывания в будущее пока не реализован</span>} />
+      <PageHeader
+        title="Историческое тестирование"
+        description="Проверка аналитических сигналов на фиксированных исторических данных без моделирования реальных сделок."
+        action={<span className="timestamp">Детерминированный демонстрационный ряд</span>}
+      />
       <div className="backtest-disclaimer">Результаты показывают историческое поведение аналитических сигналов. Они не являются симуляцией поручений или реального исполнения.</div>
-      <section className="backtest-layout"><aside className="panel strategy-form"><p className="eyebrow">Параметры</p><h2>Настройка теста</h2><label>Актив<select defaultValue="AAPL"><option>AAPL · Apple Inc.</option><option>MSFT · Microsoft</option><option>TLT · Treasury ETF</option></select></label><label>Метод формирования сигналов<select defaultValue="moving"><option value="moving">Пересечение скользящих средних</option><option value="hold">Постоянное удержание актива</option></select></label><div className="field-row"><label>Короткое окно<input type="number" defaultValue="10" min="2"/></label><label>Длинное окно<input type="number" defaultValue="30" min="3"/></label></div><label>Условная начальная стоимость (USD)<input type="number" defaultValue="10000" min="1"/></label><label>Период<div className="field-row"><input type="date" defaultValue="2025-06-29"/><input type="date" defaultValue="2026-06-29"/></div></label><button className="primary-button full-width">Запустить исторический тест</button><p className="ticket-warning">Используется фиксированный демонстрационный ряд без комиссий, спредов, налогов и ограничений ликвидности.</p></aside><div className="backtest-results"><section className="metrics-grid compact-metrics"><MetricCard label="Доходность" value="+15.00%" detail="Базовый сценарий: +11.20%" tone="positive"/><MetricCard label="Максимальная просадка" value="−3.70%" detail="Историческая кривая" tone="negative"/><MetricCard label="Коэффициент Шарпа" value="1.31" detail="Безрисковая ставка: 0%"/><MetricCard label="Сигналы" value="7" detail="4 верных · 3 ошибочных"/></section><article className="panel chart-panel"><div className="panel-heading"><div><p className="eyebrow">Историческая кривая</p><h2>Сигналы и базовый сценарий</h2></div><div className="chart-legend"><span><i/>Аналитические сигналы</span><span><i/>Базовый сценарий</span></div></div><svg className="main-chart backtest-chart" viewBox="0 0 620 180" preserveAspectRatio="none" role="img" aria-label="Историческая динамика условной стоимости"><path d={pricePath} fill="none" stroke="#2dd4a8" strokeWidth="3" vectorEffect="non-scaling-stroke"/><path d="M0 160 C80 145, 110 148, 180 120 S290 115, 360 82 S490 72, 620 48" fill="none" stroke="#77839a" strokeDasharray="5 5" strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg><div className="chart-axis"><span>Июнь 2025</span><span>Сент. 2025</span><span>Дек. 2025</span><span>Июнь 2026</span></div></article><article className="panel assumption-panel"><h2>Ограничения модели</h2><ul><li>Только цены закрытия дня</li><li>Без комиссий и спредов</li><li>Без поправки на ошибку выжившего</li><li>Без корпоративных действий</li></ul></article></div></section>
+      <BacktestingWorkbench />
     </>
   );
 }

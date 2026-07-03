@@ -190,8 +190,11 @@ class DashboardSummary(BaseModel):
 class BacktestRequest(BaseModel):
     symbol: Ticker
     initial_capital: Decimal = Field(default=Decimal("10000.00"), gt=0)
-    short_window: int = Field(default=10, ge=2, le=100)
+    short_window: int = Field(default=10, ge=1, le=100)
     long_window: int = Field(default=30, ge=3, le=250)
+    method: Literal["moving", "hold"] = "moving"
+    start_date: date = date(2025, 6, 29)
+    end_date: date = date(2026, 6, 29)
 
     @field_validator("long_window")
     @classmethod
@@ -200,11 +203,28 @@ class BacktestRequest(BaseModel):
             raise ValueError("long_window must be greater than short_window")
         return value
 
+    @model_validator(mode="after")
+    def validate_period(self) -> "BacktestRequest":
+        if self.start_date >= self.end_date:
+            raise ValueError("start_date must be earlier than end_date")
+        return self
+
 
 class BacktestResult(BaseModel):
     symbol: Ticker
+    method: Literal["moving", "hold"]
+    start_date: date
+    end_date: date
+    final_value: Decimal
+    benchmark_final_value: Decimal
     total_return_percent: Decimal
+    benchmark_return_percent: Decimal
     max_drawdown_percent: Decimal
     sharpe_ratio: Decimal
     signals: int
+    correct_signals: int
+    incorrect_signals: int
+    dates: list[date]
+    strategy_curve: list[Decimal]
+    benchmark_curve: list[Decimal]
     note: str

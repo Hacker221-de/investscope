@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.core.time import utc_now
 from app.demo_data import ASSETS, POLITICAL_EVENTS, PORTFOLIO, RECOMMENDATIONS
-from app.modules.backtesting import backtest_summary
+from app.modules.backtesting import fixed_demo_series, sma_crossover_analysis
 from app.modules.data_sources import DemoMarketDataSource
 from app.modules.portfolio import OwnedPosition, analyze_portfolio
 from app.schemas import (
@@ -216,21 +216,33 @@ def list_political_events() -> list[PoliticalEventView]:
 def run_backtest(request: BacktestRequest) -> BacktestResult:
     if market_data.price_for(request.symbol) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    demo_prices = [
-        Decimal("100"),
-        Decimal("104"),
-        Decimal("102"),
-        Decimal("108"),
-        Decimal("111"),
-        Decimal("107"),
-        Decimal("115"),
-    ]
-    result = backtest_summary(demo_prices, request.initial_capital)
+    try:
+        dates, demo_prices = fixed_demo_series(request.start_date, request.end_date)
+        result = sma_crossover_analysis(
+            demo_prices,
+            request.initial_capital,
+            request.short_window,
+            request.long_window,
+            request.method,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
     return BacktestResult(
         symbol=request.symbol.upper(),
+        method=request.method,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        final_value=result["final_value"],
+        benchmark_final_value=result["benchmark_final_value"],
         total_return_percent=result["total_return_percent"],
+        benchmark_return_percent=result["benchmark_return_percent"],
         max_drawdown_percent=result["max_drawdown_percent"],
-        sharpe_ratio=Decimal("1.31"),
+        sharpe_ratio=result["sharpe_ratio"],
         signals=int(result["signals"]),
-        note="Illustrative result calculated from a fixed demo price series; not investment advice.",
+        correct_signals=int(result["correct_signals"]),
+        incorrect_signals=int(result["incorrect_signals"]),
+        dates=dates,
+        strategy_curve=result["strategy_curve"],
+        benchmark_curve=result["benchmark_curve"],
+        note="Deterministic analytical SMA test on a fixed demo series; no orders or executions.",
     )
