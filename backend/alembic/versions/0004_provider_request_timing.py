@@ -32,8 +32,19 @@ def upgrade() -> None:
         "UPDATE provider_request_logs "
         "SET started_at = requested_at, completed_at = requested_at"
     )
-    op.alter_column("provider_request_logs", "started_at", nullable=False)
-    op.alter_column("provider_request_logs", "completed_at", nullable=False)
+    with op.batch_alter_table("provider_request_logs") as batch_op:
+        batch_op.alter_column(
+            "started_at",
+            existing_type=sa.DateTime(timezone=True),
+            existing_nullable=True,
+            nullable=False,
+        )
+        batch_op.alter_column(
+            "completed_at",
+            existing_type=sa.DateTime(timezone=True),
+            existing_nullable=True,
+            nullable=False,
+        )
     op.create_index(
         "ix_provider_request_logs_started_at",
         "provider_request_logs",
@@ -43,6 +54,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_provider_request_logs_started_at", table_name="provider_request_logs")
-    op.drop_column("provider_request_logs", "retry_after_seconds")
-    op.drop_column("provider_request_logs", "completed_at")
-    op.drop_column("provider_request_logs", "started_at")
+    with op.batch_alter_table("provider_request_logs") as batch_op:
+        batch_op.drop_column("retry_after_seconds")
+        batch_op.drop_column("completed_at")
+        batch_op.drop_column("started_at")

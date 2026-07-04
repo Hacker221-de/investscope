@@ -1,10 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base, UTCDateTime
+from app.core.database import Base, ExactNumeric, UTCDateTime
 from app.core.time import utc_now
 
 
@@ -64,11 +64,11 @@ class MarketBar(Base):
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
     timeframe: Mapped[str] = mapped_column(String(8), index=True)
     event_time: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
-    open: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
-    high: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
-    low: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
-    close: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
-    adjusted_close: Mapped[Decimal | None] = mapped_column(Numeric(20, 8))
+    open: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 8))
+    high: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 8))
+    low: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 8))
+    close: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 8))
+    adjusted_close: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 8))
     volume: Mapped[int | None] = mapped_column(BigInteger)
     provider: Mapped[str] = mapped_column(String(40), index=True)
     published_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

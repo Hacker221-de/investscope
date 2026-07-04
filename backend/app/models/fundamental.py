@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, ForeignKey, JSON, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base, UTCDateTime
+from app.core.database import Base, ExactNumeric, UTCDateTime
 from app.core.time import utc_now
 
 
@@ -84,7 +84,7 @@ class FinancialFact(Base):
     description: Mapped[str | None] = mapped_column(String(2000))
     normalized_metric: Mapped[str | None] = mapped_column(String(80), index=True)
     unit: Mapped[str] = mapped_column(String(80))
-    value: Mapped[Decimal] = mapped_column(Numeric(38, 10))
+    value: Mapped[Decimal] = mapped_column(ExactNumeric(38, 10))
     period_start: Mapped[date | None] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date, index=True)
     filed_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)

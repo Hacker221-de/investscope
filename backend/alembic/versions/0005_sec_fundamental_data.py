@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from alembic import op
 import sqlalchemy as sa
 
+from app.core.database import ExactNumeric
+
 revision: str = "0005"
 down_revision: str | None = "0004"
 branch_labels: str | Sequence[str] | None = None
@@ -87,7 +89,7 @@ def upgrade() -> None:
         sa.Column("description", sa.String(length=2000), nullable=True),
         sa.Column("normalized_metric", sa.String(length=80), nullable=True),
         sa.Column("unit", sa.String(length=80), nullable=False),
-        sa.Column("value", sa.Numeric(38, 10), nullable=False),
+        sa.Column("value", ExactNumeric(38, 10), nullable=False),
         sa.Column("period_start", sa.Date(), nullable=True),
         sa.Column("period_end", sa.Date(), nullable=False),
         sa.Column("filed_at", sa.DateTime(timezone=True), nullable=False),

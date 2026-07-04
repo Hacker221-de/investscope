@@ -1,12 +1,16 @@
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "InvestScope API"
     environment: str = "development"
+    mode: Literal["server", "desktop"] = "server"
+    data_dir: Path | None = None
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://investscope:investscope@db:5432/investscope"
     cors_origins: list[str] = ["http://localhost:3000"]
@@ -27,6 +31,11 @@ class Settings(BaseSettings):
     sec_ticker_cache_ttl_hours: int = 168
     sec_request_timeout_seconds: float = 30.0
     sec_import_max_file_mb: int = 100
+
+    @field_validator("data_dir", mode="before")
+    @classmethod
+    def empty_data_dir_uses_platform_default(cls, value: object) -> object:
+        return None if value == "" else value
 
     model_config = SettingsConfigDict(
         env_file=".env",

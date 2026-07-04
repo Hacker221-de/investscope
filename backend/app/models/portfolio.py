@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Numeric, String
+from sqlalchemy import Date, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base, UTCDateTime
+from app.core.database import Base, ExactNumeric, UTCDateTime
 from app.core.time import utc_now
 
 
@@ -25,11 +25,11 @@ class Position(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id", ondelete="CASCADE"))
     symbol: Mapped[str] = mapped_column(String(16), index=True)
-    quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8))
-    average_purchase_price: Mapped[Decimal] = mapped_column(Numeric(20, 6))
+    quantity: Mapped[Decimal] = mapped_column(ExactNumeric(20, 8))
+    average_purchase_price: Mapped[Decimal] = mapped_column(ExactNumeric(20, 6))
     purchase_date: Mapped[date] = mapped_column(Date())
     currency: Mapped[str] = mapped_column(String(3))
-    fees: Mapped[Decimal | None] = mapped_column(Numeric(20, 4), nullable=True)
+    fees: Mapped[Decimal | None] = mapped_column(ExactNumeric(20, 4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, onupdate=utc_now)
 

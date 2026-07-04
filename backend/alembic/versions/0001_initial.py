@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from alembic import op
 import sqlalchemy as sa
 
+from app.core.database import ExactNumeric
+
 revision: str = "0001"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
@@ -58,7 +60,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("asset_id", sa.Integer(), nullable=False),
         sa.Column("timestamp", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("close", sa.Numeric(20, 6), nullable=False),
+        sa.Column("close", ExactNumeric(20, 6), nullable=False),
         sa.ForeignKeyConstraint(["asset_id"], ["assets.id"], name="fk_price_points_asset_id_assets", ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id", name="pk_price_points"),
     )
@@ -70,7 +72,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("asset_id", sa.Integer(), nullable=False),
         sa.Column("rating", sa.String(length=16), nullable=False),
-        sa.Column("score", sa.Numeric(5, 2), nullable=False),
+        sa.Column("score", ExactNumeric(5, 2), nullable=False),
         sa.Column("rationale", sa.Text(), nullable=False),
         sa.Column("horizon", sa.String(length=32), nullable=False),
         sa.Column("generated_at", sa.DateTime(timezone=True), nullable=False),
@@ -85,11 +87,11 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("portfolio_id", sa.Integer(), nullable=False),
         sa.Column("symbol", sa.String(length=16), nullable=False),
-        sa.Column("quantity", sa.Numeric(20, 8), nullable=False),
-        sa.Column("average_purchase_price", sa.Numeric(20, 6), nullable=False),
+        sa.Column("quantity", ExactNumeric(20, 8), nullable=False),
+        sa.Column("average_purchase_price", ExactNumeric(20, 6), nullable=False),
         sa.Column("purchase_date", sa.Date(), nullable=False),
         sa.Column("currency", sa.String(length=3), nullable=False),
-        sa.Column("fees", sa.Numeric(20, 4), nullable=True),
+        sa.Column("fees", ExactNumeric(20, 4), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["portfolio_id"], ["portfolios.id"], name="fk_positions_portfolio_id_portfolios", ondelete="CASCADE"),
