@@ -12,20 +12,63 @@ export interface Asset {
   rating: Rating;
 }
 
+export type DecimalJson = string | number;
+
+export interface ApiErrorPayload {
+  detail?: unknown;
+}
+
+export interface Portfolio {
+  id: number;
+  name: string;
+  base_currency: string;
+  created_at: string;
+}
+
+export interface PortfolioCreate {
+  name: string;
+  base_currency?: string;
+}
+
+export interface PortfolioUpdate {
+  name?: string;
+  base_currency?: string;
+}
+
 export interface Position {
   id: number;
+  portfolio_id: number;
+  asset_id: number;
   symbol: string;
-  quantity: number;
-  averagePurchasePrice: number;
-  purchaseDate: string;
+  quantity: DecimalJson;
+  average_purchase_price: DecimalJson;
+  purchase_date: string;
   currency: string;
-  fees?: number;
-  sector: string;
-  geography: string;
-  currentPrice: number;
-  currentValue: number;
-  pnl: number;
-  weight: number;
+  fees: DecimalJson | null;
+  created_at: string;
+  updated_at: string;
+  asset?: MarketAsset | null;
+}
+
+export interface PositionCreate {
+  asset_id: number;
+  quantity: string;
+  average_purchase_price: string;
+  purchase_date: string;
+  currency: string;
+  fees?: string | null;
+}
+
+export interface PositionUpdate {
+  quantity?: string;
+  average_purchase_price?: string;
+  purchase_date?: string;
+  currency?: string;
+  fees?: string | null;
+}
+
+export interface PortfolioDetail extends Portfolio {
+  positions: Position[];
 }
 
 export interface MarketQuote {

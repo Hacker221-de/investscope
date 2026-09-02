@@ -24,3 +24,8 @@ test("does not duplicate the prefix when the caller passes a fully prefixed path
   );
   assert.equal(normalizeLegacyApiBaseUrl("http://127.0.0.1:8000"), "http://127.0.0.1:8000/api/v1");
 });
+
+test("uses a relative legacy prefix when no API origin is configured", () => {
+  assert.equal(buildLegacyApiUrl(undefined, "/portfolios"), "/api/v1/portfolios");
+  assert.equal(buildLegacyApiUrl("", "/api/v1/portfolios"), "/api/v1/portfolios");
+});
