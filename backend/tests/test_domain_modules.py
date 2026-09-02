@@ -10,7 +10,7 @@ from app.modules.forecasting import linear_projection
 from app.modules.fundamental_analysis import fundamental_score
 from app.modules.political_analysis import political_risk_score
 from app.modules.technical_analysis import moving_average_signal
-from app.schemas import PositionCreate
+from app.schemas import LegacyPositionCreate
 
 
 def test_demo_data_source_is_deterministic() -> None:
@@ -49,7 +49,7 @@ def test_tickers_are_ascii_and_cyrillic_ticker_is_rejected() -> None:
     assert {"NVDA", "TLT"} <= set(tickers)
 
     with pytest.raises(ValidationError):
-        PositionCreate(
+        LegacyPositionCreate(
             symbol="\u041d\u0412\u0414\u0410",
             quantity=Decimal("1"),
             average_purchase_price=Decimal("100"),

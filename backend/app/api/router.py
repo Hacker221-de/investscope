@@ -4,14 +4,29 @@ from decimal import Decimal
 from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
+from app.core.database import get_db
 from app.core.time import utc_now
-from app.demo_data import ASSETS, POLITICAL_EVENTS, PORTFOLIO, RECOMMENDATIONS
+from app.demo_data import ASSETS, POLITICAL_EVENTS, RECOMMENDATIONS
 from app.modules.backtesting import fixed_demo_series, sma_crossover_analysis
 from app.modules.data_sources import DemoMarketDataSource
-from app.modules.portfolio import OwnedPosition, analyze_portfolio
+from app.modules.portfolio import (
+    AssetNotFoundError,
+    DuplicatePositionError,
+    OwnedPosition,
+    PortfolioDomainError,
+    PortfolioNotFoundError,
+    PortfolioPersistenceError,
+    PortfolioService,
+    PortfolioValidationError,
+    PositionNotFoundError,
+    analyze_portfolio,
+)
+from app.repositories import MarketDataRepository
 from app.schemas import (
     AssetDetail,
     AssetSummary,
@@ -19,8 +34,8 @@ from app.schemas import (
     BacktestResult,
     CSVImportResult,
     DashboardSummary,
-    PositionCreate,
-    PositionUpdate,
+    LegacyPositionCreate,
+    LegacyPositionUpdate,
     PositionView,
     PoliticalEventView,
     PortfolioView,
@@ -41,56 +56,86 @@ def _asset_metadata(symbol: str) -> dict[str, Any]:
     return asset
 
 
-def _owned_positions() -> list[OwnedPosition]:
+def _portfolio_http_error(error: PortfolioDomainError) -> HTTPException:
+    if isinstance(error, (PortfolioNotFoundError, PositionNotFoundError, AssetNotFoundError)):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
+    if isinstance(error, DuplicatePositionError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
+    if isinstance(error, PortfolioValidationError):
+        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
+    if isinstance(error, PortfolioPersistenceError):
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Portfolio storage operation failed",
+        )
+    return HTTPException(status_code=500, detail="Portfolio operation failed")
+
+
+def _first_portfolio(service: PortfolioService):
+    portfolios = service.list_portfolios()
+    if not portfolios:
+        raise PortfolioNotFoundError("Portfolio not found")
+    return service.get_portfolio(portfolios[0].id)
+
+
+def _owned_positions(
+    db: Session,
+    service: PortfolioService,
+    portfolio_id: int,
+    provider: str,
+) -> list[OwnedPosition]:
     result: list[OwnedPosition] = []
-    for raw in PORTFOLIO["positions"]:
-        asset = _asset_metadata(raw["symbol"])
+    market_repository = MarketDataRepository(db)
+    for position in service.list_positions(portfolio_id):
+        asset = position.asset
+        quote = market_repository.latest(asset.id, provider)
         result.append(
             OwnedPosition(
-                id=raw["id"],
-                symbol=raw["symbol"],
-                quantity=raw["quantity"],
-                average_purchase_price=raw["average_purchase_price"],
-                purchase_date=raw["purchase_date"],
-                currency=raw["currency"],
-                fees=raw.get("fees"),
-                sector=asset["sector"],
-                geography=raw.get("geography", "Unknown"),
-                current_price=asset["price"],
+                id=position.id,
+                symbol=asset.symbol,
+                quantity=position.quantity,
+                average_purchase_price=position.average_purchase_price,
+                purchase_date=position.purchase_date,
+                currency=position.currency,
+                fees=position.fees,
+                sector=asset.sector or "Unknown",
+                geography="Unknown",
+                current_price=quote.close if quote is not None else None,
+                price_source=quote.provider if quote is not None else None,
+                price_updated_at=quote.received_at if quote is not None else None,
             )
         )
     return result
 
 
-def _portfolio_view() -> PortfolioView:
+def _portfolio_view(db: Session, settings: Settings) -> PortfolioView:
+    service = PortfolioService(db)
+    portfolio = _first_portfolio(service)
     analysis = analyze_portfolio(
-        name=PORTFOLIO["name"],
-        base_currency=PORTFOLIO["base_currency"],
-        positions=_owned_positions(),
-        as_of=PORTFOLIO["as_of"],
+        name=portfolio.name,
+        base_currency=portfolio.base_currency,
+        positions=_owned_positions(
+            db,
+            service,
+            portfolio.id,
+            settings.market_data_provider,
+        ),
+        as_of=utc_now(),
     )
     return PortfolioView.model_validate(analysis)
 
 
-def _append_position(position: PositionCreate) -> int:
-    asset = _asset_metadata(position.symbol)
-    raw_positions: list[dict[str, Any]] = PORTFOLIO["positions"]
-    position_id = max((item["id"] for item in raw_positions), default=0) + 1
-    raw_positions.append(
-        {
-            "id": position_id,
-            **position.model_dump(),
-            "sector": asset["sector"],
-            "geography": "United States",
-        }
-    )
-    PORTFOLIO["as_of"] = utc_now()
-    return position_id
-
-
-def _view_for_id(position_id: int) -> PositionView:
+def _view_for_id(
+    db: Session,
+    settings: Settings,
+    position_id: int,
+) -> PositionView:
     view = next(
-        (position for position in _portfolio_view().positions if position.id == position_id),
+        (
+            position
+            for position in _portfolio_view(db, settings).positions
+            if position.id == position_id
+        ),
         None,
     )
     if view is None:
@@ -99,13 +144,19 @@ def _view_for_id(position_id: int) -> PositionView:
 
 
 @router.get("/dashboard", response_model=DashboardSummary)
-def dashboard() -> DashboardSummary:
-    portfolio = _portfolio_view()
+def dashboard(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DashboardSummary:
+    try:
+        portfolio = _portfolio_view(db, settings)
+    except PortfolioNotFoundError:
+        portfolio = None
     return DashboardSummary(
-        portfolio_value=portfolio.current_value,
-        invested_capital=portfolio.invested_capital,
-        unrealized_pnl=portfolio.unrealized_pnl,
-        total_return_percent=portfolio.total_return_percent,
+        portfolio_value=portfolio.current_value if portfolio else Decimal("0"),
+        invested_capital=portfolio.invested_capital if portfolio else Decimal("0"),
+        unrealized_pnl=portfolio.unrealized_pnl if portfolio else Decimal("0"),
+        total_return_percent=portfolio.total_return_percent if portfolio else Decimal("0"),
         active_recommendations=len(RECOMMENDATIONS),
         high_impact_events=sum(event["impact"] == "high" for event in POLITICAL_EVENTS),
         market_status="DEMO MARKET DATA",
@@ -131,43 +182,82 @@ def list_recommendations() -> list[RecommendationView]:
 
 
 @router.get("/portfolio", response_model=PortfolioView)
-def get_portfolio() -> PortfolioView:
-    return _portfolio_view()
+def get_portfolio(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> PortfolioView:
+    try:
+        return _portfolio_view(db, settings)
+    except PortfolioDomainError as error:
+        raise _portfolio_http_error(error) from error
 
 
 @router.post("/portfolio/positions", response_model=PositionView, status_code=status.HTTP_201_CREATED)
-def create_position(position: PositionCreate) -> PositionView:
-    return _view_for_id(_append_position(position))
+def create_position(
+    position: LegacyPositionCreate,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> PositionView:
+    service = PortfolioService(db)
+    try:
+        portfolio = _first_portfolio(service)
+        asset = service.repository.get_asset_by_symbol(position.symbol)
+        if asset is None:
+            raise AssetNotFoundError("Asset not found")
+        created = service.create_position(
+            portfolio.id,
+            asset_id=asset.id,
+            quantity=position.quantity,
+            average_purchase_price=position.average_purchase_price,
+            purchase_date=position.purchase_date,
+            currency=position.currency,
+            fees=position.fees,
+        )
+        return _view_for_id(db, settings, created.id)
+    except PortfolioDomainError as error:
+        raise _portfolio_http_error(error) from error
 
 
 @router.patch("/portfolio/positions/{position_id}", response_model=PositionView)
-def update_position(position_id: int, update: PositionUpdate) -> PositionView:
-    raw_positions: list[dict[str, Any]] = PORTFOLIO["positions"]
-    position = next((item for item in raw_positions if item["id"] == position_id), None)
-    if position is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Position not found")
-    changes = update.model_dump(exclude_unset=True)
-    if "symbol" in changes:
-        asset = _asset_metadata(changes["symbol"])
-        changes["sector"] = asset["sector"]
-    position.update(changes)
-    PORTFOLIO["as_of"] = utc_now()
-    return _view_for_id(position_id)
+def update_position(
+    position_id: int,
+    update: LegacyPositionUpdate,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> PositionView:
+    service = PortfolioService(db)
+    try:
+        portfolio = _first_portfolio(service)
+        existing = service.get_position(portfolio.id, position_id)
+        changes = update.model_dump(exclude_unset=True)
+        requested_symbol = changes.pop("symbol", existing.symbol)
+        if requested_symbol is None or requested_symbol.upper() != existing.symbol:
+            raise PortfolioValidationError(
+                "Asset cannot be changed; delete the position and create a new one"
+            )
+        service.update_position(portfolio.id, position_id, changes)
+        return _view_for_id(db, settings, position_id)
+    except PortfolioDomainError as error:
+        raise _portfolio_http_error(error) from error
 
 
 @router.delete("/portfolio/positions/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_position(position_id: int) -> Response:
-    raw_positions: list[dict[str, Any]] = PORTFOLIO["positions"]
-    position = next((item for item in raw_positions if item["id"] == position_id), None)
-    if position is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Position not found")
-    raw_positions.remove(position)
-    PORTFOLIO["as_of"] = utc_now()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+def delete_position(position_id: int, db: Session = Depends(get_db)) -> Response:
+    service = PortfolioService(db)
+    try:
+        portfolio = _first_portfolio(service)
+        service.delete_position(portfolio.id, position_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except PortfolioDomainError as error:
+        raise _portfolio_http_error(error) from error
 
 
 @router.post("/portfolio/import-csv", response_model=CSVImportResult)
-async def import_positions_csv(file: UploadFile = File(...)) -> CSVImportResult:
+async def import_positions_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> CSVImportResult:
     if file.size is not None and file.size > 1_000_000:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="CSV is too large")
     try:
@@ -183,11 +273,16 @@ async def import_positions_csv(file: UploadFile = File(...)) -> CSVImportResult:
             detail=f"CSV must contain columns: {', '.join(sorted(required))}; fees is optional",
         )
 
+    service = PortfolioService(db)
+    try:
+        portfolio = _first_portfolio(service)
+    except PortfolioDomainError as error:
+        raise _portfolio_http_error(error) from error
     imported_ids: list[int] = []
     errors: list[str] = []
     for row_number, row in enumerate(reader, start=2):
         try:
-            payload = PositionCreate(
+            payload = LegacyPositionCreate(
                 symbol=row["symbol"],
                 quantity=Decimal(row["quantity"]),
                 average_purchase_price=Decimal(row["average_purchase_price"]),
@@ -195,11 +290,29 @@ async def import_positions_csv(file: UploadFile = File(...)) -> CSVImportResult:
                 currency=row["currency"],
                 fees=Decimal(row["fees"]) if row.get("fees") else None,
             )
-            imported_ids.append(_append_position(payload))
-        except (ValidationError, ValueError, ArithmeticError, HTTPException) as error:
+            asset = service.repository.get_asset_by_symbol(payload.symbol)
+            if asset is None:
+                raise AssetNotFoundError("Asset not found")
+            created = service.create_position(
+                portfolio.id,
+                asset_id=asset.id,
+                quantity=payload.quantity,
+                average_purchase_price=payload.average_purchase_price,
+                purchase_date=payload.purchase_date,
+                currency=payload.currency,
+                fees=payload.fees,
+            )
+            imported_ids.append(created.id)
+        except (
+            ValidationError,
+            ValueError,
+            ArithmeticError,
+            HTTPException,
+            PortfolioDomainError,
+        ) as error:
             errors.append(f"row {row_number}: {error}")
 
-    all_positions = _portfolio_view().positions
+    all_positions = _portfolio_view(db, settings).positions
     return CSVImportResult(
         imported_count=len(imported_ids),
         positions=[position for position in all_positions if position.id in imported_ids],

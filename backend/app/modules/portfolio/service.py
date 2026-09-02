@@ -1,15 +1,276 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, localcontext
 from itertools import combinations
+from typing import Any
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.models import Portfolio, Position
 from app.modules.risk import max_drawdown
+from app.repositories.portfolio import PortfolioRepository
 
 DISCLAIMER = (
     "InvestScope анализирует введённые пользователем позиции, "
     "но не подключается к брокеру и не совершает сделки"
 )
+
+
+class PortfolioDomainError(Exception):
+    pass
+
+
+class PortfolioNotFoundError(PortfolioDomainError):
+    pass
+
+
+class PositionNotFoundError(PortfolioDomainError):
+    pass
+
+
+class AssetNotFoundError(PortfolioDomainError):
+    pass
+
+
+class DuplicatePositionError(PortfolioDomainError):
+    pass
+
+
+class PortfolioValidationError(PortfolioDomainError):
+    pass
+
+
+class PortfolioPersistenceError(PortfolioDomainError):
+    pass
+
+
+class PortfolioService:
+    def __init__(
+        self,
+        session: Session,
+        repository: PortfolioRepository | None = None,
+    ) -> None:
+        self.session = session
+        self.repository = repository or PortfolioRepository(session)
+
+    @staticmethod
+    def _name(value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise PortfolioValidationError("Portfolio name must not be empty")
+        if len(normalized) > 120:
+            raise PortfolioValidationError("Portfolio name must not exceed 120 characters")
+        return normalized
+
+    @staticmethod
+    def _currency(value: str) -> str:
+        normalized = value.strip().upper()
+        if len(normalized) != 3 or not normalized.isascii() or not normalized.isalpha():
+            raise PortfolioValidationError("Currency must contain three ASCII letters")
+        return normalized
+
+    @staticmethod
+    def _decimal(
+        value: Decimal | int | str,
+        *,
+        field: str,
+        precision: int,
+        scale: int,
+        strictly_positive: bool = False,
+    ) -> Decimal:
+        if isinstance(value, float):
+            raise PortfolioValidationError(f"{field} must not use binary floating point")
+        try:
+            decimal_value = value if isinstance(value, Decimal) else Decimal(value)
+            with localcontext() as context:
+                context.prec = max(precision + scale + 4, 50)
+                normalized = decimal_value.quantize(Decimal(1).scaleb(-scale))
+        except (InvalidOperation, TypeError, ValueError) as error:
+            raise PortfolioValidationError(f"{field} must be a valid decimal") from error
+        if not normalized.is_finite():
+            raise PortfolioValidationError(f"{field} must be finite")
+        if decimal_value != normalized:
+            raise PortfolioValidationError(f"{field} supports at most {scale} decimal places")
+        if strictly_positive and normalized <= 0:
+            raise PortfolioValidationError(f"{field} must be greater than zero")
+        if not strictly_positive and normalized < 0:
+            raise PortfolioValidationError(f"{field} must not be negative")
+        if abs(int(normalized.scaleb(scale))) >= 10**precision:
+            raise PortfolioValidationError(
+                f"{field} exceeds precision {precision} and scale {scale}"
+            )
+        return normalized
+
+    def list_portfolios(self) -> list[Portfolio]:
+        return self.repository.list_portfolios()
+
+    def get_portfolio(self, portfolio_id: int) -> Portfolio:
+        portfolio = self.repository.get_portfolio(portfolio_id)
+        if portfolio is None:
+            raise PortfolioNotFoundError("Portfolio not found")
+        return portfolio
+
+    def create_portfolio(self, *, name: str, base_currency: str = "USD") -> Portfolio:
+        try:
+            portfolio = self.repository.create_portfolio(
+                name=self._name(name),
+                base_currency=self._currency(base_currency),
+            )
+            self.session.commit()
+            self.session.refresh(portfolio)
+            return portfolio
+        except PortfolioDomainError:
+            self.session.rollback()
+            raise
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Portfolio could not be saved") from error
+
+    def update_portfolio(self, portfolio_id: int, changes: dict[str, Any]) -> Portfolio:
+        try:
+            portfolio = self.get_portfolio(portfolio_id)
+            normalized: dict[str, Any] = {}
+            if "name" in changes:
+                normalized["name"] = self._name(changes["name"])
+            if "base_currency" in changes:
+                normalized["base_currency"] = self._currency(changes["base_currency"])
+            self.repository.update_portfolio(portfolio, normalized)
+            self.session.commit()
+            self.session.refresh(portfolio)
+            return portfolio
+        except PortfolioDomainError:
+            self.session.rollback()
+            raise
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Portfolio could not be updated") from error
+
+    def delete_portfolio(self, portfolio_id: int) -> None:
+        portfolio = self.get_portfolio(portfolio_id)
+        try:
+            self.repository.delete_portfolio(portfolio)
+            self.session.commit()
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Portfolio could not be deleted") from error
+
+    def list_positions(self, portfolio_id: int) -> list[Position]:
+        self.get_portfolio(portfolio_id)
+        return self.repository.list_positions(portfolio_id)
+
+    def get_position(self, portfolio_id: int, position_id: int) -> Position:
+        self.get_portfolio(portfolio_id)
+        position = self.repository.get_position(portfolio_id, position_id)
+        if position is None:
+            raise PositionNotFoundError("Position not found in this portfolio")
+        return position
+
+    def create_position(
+        self,
+        portfolio_id: int,
+        *,
+        asset_id: int,
+        quantity: Decimal | int | str,
+        average_purchase_price: Decimal | int | str,
+        purchase_date: date,
+        currency: str,
+        fees: Decimal | int | str | None = None,
+    ) -> Position:
+        try:
+            self.get_portfolio(portfolio_id)
+            asset = self.repository.get_asset(asset_id)
+            if asset is None:
+                raise AssetNotFoundError("Asset not found")
+            if self.repository.get_position_by_asset(portfolio_id, asset_id) is not None:
+                raise DuplicatePositionError("Position for this asset already exists")
+            normalized_fees = (
+                self._decimal(fees, field="fees", precision=20, scale=4)
+                if fees is not None else None
+            )
+            position = self.repository.create_position(
+                portfolio_id=portfolio_id,
+                asset=asset,
+                quantity=self._decimal(
+                    quantity,
+                    field="quantity",
+                    precision=20,
+                    scale=8,
+                    strictly_positive=True,
+                ),
+                average_purchase_price=self._decimal(
+                    average_purchase_price,
+                    field="average_purchase_price",
+                    precision=20,
+                    scale=6,
+                ),
+                purchase_date=purchase_date,
+                currency=self._currency(currency),
+                fees=normalized_fees,
+            )
+            self.session.commit()
+            self.session.refresh(position)
+            return position
+        except IntegrityError as error:
+            self.session.rollback()
+            raise DuplicatePositionError("Position for this asset already exists") from error
+        except PortfolioDomainError:
+            self.session.rollback()
+            raise
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Position could not be saved") from error
+
+    def update_position(
+        self,
+        portfolio_id: int,
+        position_id: int,
+        changes: dict[str, Any],
+    ) -> Position:
+        try:
+            position = self.get_position(portfolio_id, position_id)
+            normalized: dict[str, Any] = {}
+            if "quantity" in changes:
+                normalized["quantity"] = self._decimal(
+                    changes["quantity"], field="quantity", precision=20, scale=8,
+                    strictly_positive=True,
+                )
+            if "average_purchase_price" in changes:
+                normalized["average_purchase_price"] = self._decimal(
+                    changes["average_purchase_price"],
+                    field="average_purchase_price",
+                    precision=20,
+                    scale=6,
+                )
+            if "purchase_date" in changes:
+                normalized["purchase_date"] = changes["purchase_date"]
+            if "currency" in changes:
+                normalized["currency"] = self._currency(changes["currency"])
+            if "fees" in changes:
+                normalized["fees"] = (
+                    self._decimal(changes["fees"], field="fees", precision=20, scale=4)
+                    if changes["fees"] is not None else None
+                )
+            self.repository.update_position(position, normalized)
+            self.session.commit()
+            self.session.refresh(position)
+            return position
+        except PortfolioDomainError:
+            self.session.rollback()
+            raise
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Position could not be updated") from error
+
+    def delete_position(self, portfolio_id: int, position_id: int) -> None:
+        position = self.get_position(portfolio_id, position_id)
+        try:
+            self.repository.delete_position(position)
+            self.session.commit()
+        except SQLAlchemyError as error:
+            self.session.rollback()
+            raise PortfolioPersistenceError("Position could not be deleted") from error
 
 
 @dataclass(frozen=True, slots=True)

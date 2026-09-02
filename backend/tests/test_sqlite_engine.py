@@ -12,7 +12,7 @@ from sqlalchemy.schema import CreateTable
 from app.core.config import Settings
 from app.core.database import ExactNumeric, UTCDateTime, build_engine
 from app.core.paths import create_desktop_directories, get_desktop_paths
-from app.models import Portfolio, Position
+from app.models import Asset, Portfolio, Position
 
 
 def desktop_engine(tmp_path: Path) -> Engine:
@@ -47,9 +47,22 @@ def test_sqlite_foreign_key_cascade_is_enforced(tmp_path: Path) -> None:
                     created_at=now,
                 )
             ).inserted_primary_key[0]
+            asset_id = connection.execute(
+                insert(Asset).values(
+                    symbol="AAPL",
+                    name="Apple Inc.",
+                    asset_type="equity",
+                    currency="USD",
+                    provider_symbol="AAPL",
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            ).inserted_primary_key[0]
             connection.execute(
                 insert(Position).values(
                     portfolio_id=portfolio_id,
+                    asset_id=asset_id,
                     symbol="AAPL",
                     quantity=Decimal("2.5"),
                     average_purchase_price=Decimal("123.45"),

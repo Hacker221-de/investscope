@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.market_data import get_market_data_provider
 from app.core.config import Settings, get_settings
-from app.core.database import Base, get_db
+from app.core.database import Base, configure_sqlite_engine, get_db
 from app.main import app
 from app.modules.data_sources import DemoMarketDataProvider
 
@@ -20,6 +20,7 @@ def db_session() -> Generator[Session, None, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    configure_sqlite_engine(engine)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     with factory() as session:

@@ -40,7 +40,7 @@ def test_cleanup_deletes_only_demo_market_bars(db_session: Session) -> None:
     db_session.add(portfolio)
     db_session.flush()
     db_session.add(Position(
-        portfolio_id=portfolio.id, symbol="AAPL", quantity=Decimal("2"),
+        portfolio_id=portfolio.id, asset_id=asset.id, symbol="AAPL", quantity=Decimal("2"),
         average_purchase_price=Decimal("180"), purchase_date=date(2025, 1, 1),
         currency="USD", fees=None,
     ))

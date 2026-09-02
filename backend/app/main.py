@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router
 from app.api.market_data import router as market_data_router
 from app.api.fundamentals import router as fundamentals_router
+from app.api.portfolios import router as portfolios_router
 from app.core.config import get_settings
 from app.core.time import utc_now
 
@@ -24,10 +25,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 app.include_router(router, prefix=settings.api_prefix)
+app.include_router(portfolios_router, prefix=settings.api_prefix)
 app.include_router(market_data_router, prefix="/api")
 app.include_router(fundamentals_router, prefix="/api")
 

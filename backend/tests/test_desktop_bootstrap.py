@@ -27,7 +27,7 @@ def test_first_bootstrap_creates_directories_and_migrated_database(tmp_path: Pat
     assert result.database_created is True
     assert result.mode == "desktop"
     assert result.database_dialect == "sqlite"
-    assert result.alembic_revision == "0007"
+    assert result.alembic_revision == "0008"
     assert result.paths.database_path.is_file()
     assert result.paths.logs_dir.is_dir()
     assert result.paths.imports_dir.is_dir()
@@ -41,7 +41,7 @@ def test_first_bootstrap_creates_directories_and_migrated_database(tmp_path: Pat
     assert diagnostics == {
         "mode": "desktop",
         "dialect": "sqlite",
-        "alembic_revision": "0007",
+        "alembic_revision": "0008",
     }
     assert str(result.paths.root_dir) not in str(diagnostics)
 
@@ -57,7 +57,7 @@ def test_second_bootstrap_is_idempotent_and_preserves_existing_data(tmp_path: Pa
     second = bootstrap_desktop(settings)
 
     assert second.database_created is False
-    assert second.alembic_revision == "0007"
+    assert second.alembic_revision == "0008"
     with closing(sqlite3.connect(second.paths.database_path)) as connection:
         assert connection.execute(
             "SELECT value FROM desktop_bootstrap_marker"
@@ -103,7 +103,7 @@ def test_existing_database_on_old_revision_is_upgraded_and_preserved(tmp_path: P
     result = bootstrap_desktop(settings)
 
     assert result.database_created is False
-    assert result.alembic_revision == "0007"
+    assert result.alembic_revision == "0008"
     with closing(sqlite3.connect(paths.database_path)) as connection:
         row = connection.execute(
             "SELECT requested_at, started_at, completed_at FROM provider_request_logs"
@@ -161,7 +161,7 @@ def test_parallel_bootstrap_returns_controlled_busy_error(
         result = first_bootstrap.result(timeout=20)
 
     assert result.database_created is True
-    assert result.alembic_revision == "0007"
+    assert result.alembic_revision == "0008"
 
 
 def test_bootstrap_rejects_server_mode(tmp_path: Path) -> None:

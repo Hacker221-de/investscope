@@ -37,7 +37,7 @@ def test_sqlite_alembic_base_to_head_and_back_to_base(tmp_path: Path) -> None:
     config = migration_config(database_path)
 
     command.upgrade(config, "head")
-    assert current_revision(database_path) == "0007"
+    assert current_revision(database_path) == "0008"
     engine = build_engine(sqlite_database_url(database_path))
     try:
         columns = {

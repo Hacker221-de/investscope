@@ -48,7 +48,7 @@ class RecommendationView(UTCModel):
     generated_at: datetime
 
 
-class PositionBase(BaseModel):
+class LegacyPositionBase(BaseModel):
     symbol: Ticker
     quantity: Decimal = Field(gt=0, decimal_places=8)
     average_purchase_price: Decimal = Field(gt=0, decimal_places=6)
@@ -62,11 +62,11 @@ class PositionBase(BaseModel):
         return value.upper()
 
 
-class PositionCreate(PositionBase):
+class LegacyPositionCreate(LegacyPositionBase):
     pass
 
 
-class PositionUpdate(BaseModel):
+class LegacyPositionUpdate(BaseModel):
     symbol: str | None = Field(default=None, min_length=1, max_length=16, pattern=r"^[A-Za-z0-9.\-]+$")
     quantity: Decimal | None = Field(default=None, gt=0, decimal_places=8)
     average_purchase_price: Decimal | None = Field(default=None, gt=0, decimal_places=6)
@@ -80,13 +80,13 @@ class PositionUpdate(BaseModel):
         return value.upper() if value is not None else None
 
     @model_validator(mode="after")
-    def require_change(self) -> "PositionUpdate":
+    def require_change(self) -> "LegacyPositionUpdate":
         if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
         return self
 
 
-class PositionView(PositionBase):
+class PositionView(LegacyPositionBase):
     id: int
     sector: str
     geography: str

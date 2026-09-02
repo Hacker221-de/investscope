@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -106,44 +106,3 @@ POLITICAL_EVENTS: list[dict[str, Any]] = [
         "occurs_at": datetime(2026, 7, 8, 10, 30, tzinfo=UTC),
     },
 ]
-
-PORTFOLIO: dict[str, Any] = {
-    "name": "Основной портфель",
-    "base_currency": "USD",
-    "as_of": datetime(2026, 6, 29, 12, 0, tzinfo=UTC),
-    "positions": [
-        {
-            "id": 1,
-            "symbol": "AAPL",
-            "quantity": Decimal("120"),
-            "average_purchase_price": Decimal("184.25"),
-            "purchase_date": date(2024, 3, 14),
-            "currency": "USD",
-            "fees": Decimal("25.00"),
-            "sector": "Technology",
-            "geography": "United States",
-        },
-        {
-            "id": 2,
-            "symbol": "MSFT",
-            "quantity": Decimal("80"),
-            "average_purchase_price": Decimal("401.10"),
-            "purchase_date": date(2024, 9, 5),
-            "currency": "USD",
-            "fees": Decimal("18.00"),
-            "sector": "Technology",
-            "geography": "United States",
-        },
-        {
-            "id": 3,
-            "symbol": "TLT",
-            "quantity": Decimal("287.98"),
-            "average_purchase_price": Decimal("90.10"),
-            "purchase_date": date(2025, 1, 22),
-            "currency": "USD",
-            "fees": Decimal("12.00"),
-            "sector": "Fixed Income",
-            "geography": "United States",
-        },
-    ],
-}
