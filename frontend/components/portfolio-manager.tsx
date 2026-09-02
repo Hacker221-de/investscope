@@ -9,9 +9,9 @@ import {
   createPosition,
   deletePortfolio,
   deletePosition,
-  fetchMarketApi,
   formatApiError,
   getPortfolio,
+  listAssets,
   listPortfolios,
   updatePortfolio,
   updatePosition,
@@ -146,7 +146,7 @@ export function PortfolioManager() {
     try {
       const [portfolioList, assetList] = await Promise.all([
         listPortfolios(),
-        fetchMarketApi<MarketAsset[]>("/assets"),
+        listAssets(),
       ]);
       setPortfolios(portfolioList);
       setMarketAssets(assetList);

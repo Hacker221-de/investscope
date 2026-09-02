@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { MetricCard } from "@/components/ui";
-import { fetchMarketApi, formatApiError, getPortfolio, listPortfolios } from "@/lib/api";
+import { formatApiError, getPortfolio, listAssets, listPortfolios } from "@/lib/api";
 import type { DecimalJson, MarketAsset, PortfolioDetail, Position } from "@/lib/types";
 
 interface DashboardPortfolioSummaryProps {
@@ -55,7 +55,7 @@ export function DashboardPortfolioSummary({ eventPanel }: DashboardPortfolioSumm
       try {
         const [portfolioList, assetList] = await Promise.all([
           listPortfolios(),
-          fetchMarketApi<MarketAsset[]>("/assets"),
+          listAssets(),
         ]);
         if (!active) return;
         setMarketAssets(assetList);

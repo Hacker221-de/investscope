@@ -1,8 +1,9 @@
 import Link from "next/link";
 
+import { DashboardRecommendationsStrip } from "@/components/dashboard-recommendations-strip";
 import { DashboardPortfolioSummary } from "@/components/dashboard-portfolio-summary";
-import { PageHeader, RatingBadge } from "@/components/ui";
-import { assets, currency, events } from "@/lib/demo-data";
+import { PageHeader } from "@/components/ui";
+import { events } from "@/lib/demo-data";
 
 export default function DashboardPage() {
   return (
@@ -20,11 +21,7 @@ export default function DashboardPage() {
         </article>
       } />
 
-      <section className="panel recommendations-strip">
-        <div><p className="eyebrow">Последний расчёт</p><h2>Аналитические рейтинги</h2></div>
-        {assets.slice(0, 3).map((asset) => <Link href={`/assets/${asset.symbol}`} className="mini-recommendation" key={asset.symbol}><span><strong>{asset.symbol}</strong><small>Расчётная стоимость {currency.format(asset.fairValue)}</small></span><RatingBadge rating={asset.rating} /></Link>)}
-        <Link href="/recommendations" className="text-link">Все рейтинги →</Link>
-      </section>
+      <DashboardRecommendationsStrip />
     </>
   );
 }

@@ -16,3 +16,16 @@ export function buildLegacyApiUrl(configuredUrl: string | undefined, path: strin
       : normalizedPath;
   return `${baseUrl}${suffix}`;
 }
+
+export function buildMarketApiUrl(configuredUrl: string | undefined, path: string): string {
+  const baseUrl = (configuredUrl ?? "").trim().replace(/\/+$/, "");
+  const normalizedPath = `/${path.replace(/^\/+/, "")}`;
+  const apiPath = normalizedPath.startsWith("/api/")
+    ? normalizedPath
+    : `/api${normalizedPath}`;
+  if (!baseUrl) return apiPath;
+  if (baseUrl.endsWith("/api") && apiPath.startsWith("/api/")) {
+    return `${baseUrl}${apiPath.slice("/api".length)}`;
+  }
+  return `${baseUrl}${apiPath}`;
+}

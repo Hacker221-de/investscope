@@ -1,6 +1,11 @@
-import { buildLegacyApiUrl } from "@/lib/api-base";
+import { buildLegacyApiUrl, buildMarketApiUrl } from "@/lib/api-base";
 import type {
   ApiErrorPayload,
+  AssetDetail,
+  AssetListItem,
+  FundamentalMetricsView,
+  LatestMarketData,
+  MarketBar,
   Portfolio,
   PortfolioCreate,
   PortfolioDetail,
@@ -8,6 +13,7 @@ import type {
   Position,
   PositionCreate,
   PositionUpdate,
+  Recommendation,
 } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_API_ROOT;
@@ -39,19 +45,6 @@ async function readApiError(response: Response): Promise<unknown> {
   return payload?.detail ?? null;
 }
 
-function buildMarketApiUrl(path: string): string {
-  const baseUrl = (API_ROOT ?? "").trim().replace(/\/+$/, "");
-  const normalizedPath = `/${path.replace(/^\/+/, "")}`;
-  const apiPath = normalizedPath.startsWith("/api/")
-    ? normalizedPath
-    : `/api${normalizedPath}`;
-  if (!baseUrl) return apiPath;
-  if (baseUrl.endsWith("/api") && apiPath.startsWith("/api/")) {
-    return `${baseUrl}${apiPath.slice("/api".length)}`;
-  }
-  return `${baseUrl}${apiPath}`;
-}
-
 export class ApiError extends Error {
   constructor(public status: number, public detail: unknown) {
     super(detailToMessage(detail, `InvestScope API request failed with status ${status}`));
@@ -76,7 +69,7 @@ export class MarketApiError extends Error {
 }
 
 export async function fetchMarketApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(buildMarketApiUrl(path), { cache: "no-store", ...init });
+  const response = await fetch(buildMarketApiUrl(API_ROOT, path), { cache: "no-store", ...init });
   if (!response.ok) {
     throw new MarketApiError(response.status, await readApiError(response));
   }
@@ -154,4 +147,44 @@ export function deletePosition(portfolioId: number, positionId: number): Promise
   return fetchFromApi<void>(`/portfolios/${portfolioId}/positions/${positionId}`, {
     method: "DELETE",
   });
+}
+
+function symbolPath(symbol: string): string {
+  return encodeURIComponent(symbol.trim().toUpperCase());
+}
+
+export interface MarketHistoryResponse {
+  symbol: string;
+  timeframe: string;
+  provider: string;
+  bars: MarketBar[];
+}
+
+export interface LatestMarketDataResponse {
+  symbol: string;
+  quote: LatestMarketData;
+}
+
+export function listAssets(): Promise<AssetListItem[]> {
+  return fetchMarketApi<AssetListItem[]>("/assets");
+}
+
+export function getAsset(symbol: string): Promise<AssetDetail> {
+  return fetchMarketApi<AssetDetail>(`/assets/${symbolPath(symbol)}`);
+}
+
+export function getAssetHistory(symbol: string): Promise<MarketHistoryResponse> {
+  return fetchMarketApi<MarketHistoryResponse>(`/market/${symbolPath(symbol)}/history`);
+}
+
+export function getAssetLatestMarketData(symbol: string): Promise<LatestMarketDataResponse> {
+  return fetchMarketApi<LatestMarketDataResponse>(`/market/${symbolPath(symbol)}/latest`);
+}
+
+export function getAssetFundamentals(symbol: string): Promise<FundamentalMetricsView> {
+  return fetchMarketApi<FundamentalMetricsView>(`/fundamentals/${symbolPath(symbol)}/metrics`);
+}
+
+export function listRecommendations(): Promise<Recommendation[]> {
+  return fetchFromApi<Recommendation[]>("/recommendations");
 }

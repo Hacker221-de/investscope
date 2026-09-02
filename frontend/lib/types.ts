@@ -1,18 +1,52 @@
 export type Trend = "up" | "down" | "flat";
 export type Rating = "BUY" | "HOLD" | "SELL";
 
-export interface Asset {
-  symbol: string;
-  name: string;
-  type: "Equity" | "ETF";
-  sector: string;
-  price: number;
-  change: number;
-  fairValue: number;
-  rating: Rating;
+export type DecimalJson = string | number;
+
+export interface LatestMarketData {
+  close: string;
+  previous_close: string | null;
+  change: string | null;
+  change_percent: string | null;
+  currency: string;
+  source: string;
+  event_time: string;
+  published_at: string | null;
+  received_at: string;
+  is_fetch_stale: boolean;
+  is_market_data_stale: boolean;
+  is_stale: boolean;
 }
 
-export type DecimalJson = string | number;
+export type MarketQuote = LatestMarketData;
+
+export interface AssetDataStatus {
+  has_latest_quote: boolean;
+  is_fetch_stale: boolean;
+  is_market_data_stale: boolean;
+  source: string | null;
+  received_at: string | null;
+}
+
+export interface AssetListItem {
+  id: number;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  exchange: string | null;
+  sector: string | null;
+  industry: string | null;
+  currency: string;
+  provider_symbol: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  latest_quote: LatestMarketData | null;
+}
+
+export type AssetDetail = AssetListItem;
+export type Asset = AssetListItem;
+export type MarketAsset = AssetListItem;
 
 export interface ApiErrorPayload {
   detail?: unknown;
@@ -69,37 +103,6 @@ export interface PositionUpdate {
 
 export interface PortfolioDetail extends Portfolio {
   positions: Position[];
-}
-
-export interface MarketQuote {
-  close: string;
-  previous_close: string | null;
-  change: string | null;
-  change_percent: string | null;
-  currency: string;
-  source: string;
-  event_time: string;
-  published_at: string | null;
-  received_at: string;
-  is_fetch_stale: boolean;
-  is_market_data_stale: boolean;
-  is_stale: boolean;
-}
-
-export interface MarketAsset {
-  id: number;
-  symbol: string;
-  name: string;
-  asset_type: string;
-  exchange: string | null;
-  sector: string | null;
-  industry: string | null;
-  currency: string;
-  provider_symbol: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  latest_quote: MarketQuote | null;
 }
 
 export interface MarketBar {
@@ -172,6 +175,15 @@ export interface BacktestResult {
   strategy_curve: string[];
   benchmark_curve: string[];
   note: string;
+}
+
+export interface Recommendation {
+  symbol: string;
+  rating: Rating;
+  score: DecimalJson;
+  rationale: string;
+  horizon: string;
+  generated_at: string;
 }
 
 export type FundamentalPeriodType = "quarterly" | "annual" | "ttm";
