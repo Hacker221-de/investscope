@@ -1,6 +1,7 @@
 import copy
 from contextlib import contextmanager
 import json
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ from app.models import Asset, CompanyFiling, CompanyProfile, FinancialFact
 from app.commands import fundamentals as fundamentals_command
 from app.modules.fundamental_analysis.manual_import import (
     SecImportCikMismatchError,
+    SecImportIdentityConflictError,
     SecImportFileNotFoundError,
     SecImportFileTooLargeError,
     SecImportInvalidCompanyFactsError,
@@ -21,7 +23,10 @@ from app.modules.fundamental_analysis.manual_import import (
     SecImportInvalidSubmissionsError,
     SecImportTransactionFailedError,
     SecManualJsonImportService,
+    decode_sec_json,
+    safe_source_filename,
 )
+from app.modules.fundamental_analysis.parsing import parse_company_facts
 from app.repositories import FundamentalRepository
 
 
@@ -289,7 +294,7 @@ def test_manual_import_requires_file_cik_to_match_saved_asset(
         exchange="Nasdaq",
     )
     paths = write_payloads(tmp_path)
-    with pytest.raises(SecImportCikMismatchError):
+    with pytest.raises(SecImportIdentityConflictError):
         import_payloads(db_session, *paths)
     asset = repository.get_asset("AAPL")
     assert asset is not None and asset.cik == "0000000001"
@@ -398,3 +403,92 @@ def test_import_sec_json_cli_returns_sync_statistics(
     assert output["provider"] == "sec_edgar"
     assert output["facts_inserted"] == 2
     assert output["facts_rejected"] == 1
+
+
+def numeric_companyfacts_bytes(token: str) -> bytes:
+    # Deliberately an unquoted JSON number: json.dumps(float(...)) would lose it.
+    payload = companyfacts_payload()
+    entries = payload["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]
+    entries[:] = entries[:1]
+    entries[0]["val"] = "NUMERIC_TOKEN"
+    return json.dumps(payload).replace('"NUMERIC_TOKEN"', token).encode("utf-8")
+
+
+@pytest.mark.parametrize("token", ["123456789012345.1234567890", "0.1", "0.0000000001", "-9.1234567890"])
+def test_manual_json_number_is_exact_through_decoder_parser_and_db(
+    db_session: Session, tmp_path: Path, token: str,
+) -> None:
+    raw = numeric_companyfacts_bytes(token)
+    payload = decode_sec_json(raw)
+    value = payload["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"][0]["val"]
+    assert type(value) is Decimal and value == Decimal(token)
+    assert type(payload["cik"]) is int
+    facts, rejected = parse_company_facts(payload)
+    assert rejected == 0 and facts[0].value == Decimal(token)
+    paths = write_payloads(tmp_path)
+    paths[1].write_bytes(b"\xef\xbb\xbf" + raw)
+    import_payloads(db_session, *paths)
+    db_session.expunge_all()
+    assert db_session.scalar(select(FinancialFact)).value == Decimal(token)
+
+
+@pytest.mark.parametrize("raw", [b'{"val":NaN}', b'{"val":Infinity}', b'{"val":-Infinity}', b"\xff"])
+def test_decoder_rejects_non_json_constants_and_invalid_utf8(raw: bytes) -> None:
+    with pytest.raises(SecImportInvalidJsonError):
+        decode_sec_json(raw)
+
+
+@pytest.mark.parametrize(("filename", "expected"), [
+    ("C:\\private\\submissions.json", "submissions.json"),
+    ("/private/submissions.json", "submissions.json"),
+    ("bad\x00\n\x1fname.json", "badname.json"),
+    ("", "submissions.json"), ("..", "submissions.json"),
+    ("a" * 600, "a" * 500),
+])
+def test_safe_source_filename(filename: str, expected: str) -> None:
+    assert safe_source_filename(filename, fallback="submissions.json") == expected
+
+
+def test_manual_cli_uses_shared_membership_and_global_identity_validation(db_session, tmp_path):
+    paths = write_payloads(tmp_path)
+    submissions = submissions_payload()
+    submissions["tickers"] = ["OTHER"]
+    paths = write_payloads(tmp_path, submissions=submissions)
+    with pytest.raises(SecImportInvalidSubmissionsError):
+        import_payloads(db_session, *paths)
+    db_session.add(Asset(symbol="FB", name="Existing", asset_type="Equity", currency="USD", cik="320193"))
+    db_session.commit()
+    paths = write_payloads(tmp_path)
+    with pytest.raises(SecImportIdentityConflictError, match="asset FB"):
+        import_payloads(db_session, *paths)
+    assert db_session.scalar(select(func.count()).select_from(Asset)) == 1
+
+
+def test_manual_import_truncates_descriptive_strings_to_actual_model_limits(db_session, tmp_path):
+    submissions = submissions_payload()
+    submissions.update(name="N" * 300, exchanges=["E" * 100], sicDescription="S" * 300)
+    submissions["filings"]["recent"]["primaryDocDescription"][0] = "D" * 700
+    companyfacts = companyfacts_payload()
+    concept = companyfacts["facts"]["us-gaap"]["NetIncomeLoss"]
+    concept.update(label="L" * 400, description="F" * 2100)
+    paths = write_payloads(tmp_path, submissions=submissions, companyfacts=companyfacts)
+    import_payloads(db_session, *paths)
+    db_session.expunge_all()
+    asset = db_session.scalar(select(Asset))
+    assert asset.name == "N" * 160 and asset.exchange == "E" * 32
+    assert asset.sec_entity_name == "N" * 240 and asset.sec_exchange == "E" * 80
+    assert db_session.scalar(select(CompanyProfile)).sic_description == "S" * 240
+    assert db_session.scalar(select(CompanyFiling).order_by(CompanyFiling.id)).primary_doc_description == "D" * 500
+    fact = db_session.scalar(select(FinancialFact))
+    assert fact.label == "L" * 300 and fact.description == "F" * 2000
+    assert import_payloads(db_session, *paths).facts_skipped == 2
+
+
+def test_manual_import_rejects_oversized_raw_identity_instead_of_merging(db_session, tmp_path):
+    companyfacts = companyfacts_payload()
+    entries = companyfacts["facts"]["us-gaap"]["NetIncomeLoss"]["units"]["USD"]
+    entries[0]["frame"] = "F" * 81
+    paths = write_payloads(tmp_path, companyfacts=companyfacts)
+    with pytest.raises(SecImportInvalidCompanyFactsError):
+        import_payloads(db_session, *paths)
+    assert db_session.scalar(select(func.count()).select_from(Asset)) == 0

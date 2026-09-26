@@ -2,11 +2,18 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from python_multipart.exceptions import MultipartParseError
+from python_multipart.multipart import parse_options_header
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import FormData, UploadFile
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.formparsers import MultiPartException, MultiPartParser
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
+from app.core.local_request_security import require_local_request
 from app.core.time import ensure_utc
 from app.modules.fundamental_analysis import (
     FundamentalDataProvider,
@@ -18,6 +25,14 @@ from app.modules.fundamental_analysis.parsing import (
     normalize_fiscal_year,
 )
 from app.modules.fundamental_analysis.metrics import FundamentalMetricsService
+from app.modules.fundamental_analysis.manual_import import (
+    SecImportError,
+    SecImportFileTooLargeError,
+    SecImportIdentityConflictError,
+    SecImportInvalidJsonError,
+    SecImportTransactionFailedError,
+    SecManualJsonImportService,
+)
 from app.modules.fundamental_analysis.sec_gateway import SecEdgarRequestGateway
 from app.modules.fundamental_analysis.sync import FundamentalSyncService
 from app.repositories import FundamentalRepository
@@ -250,3 +265,150 @@ async def sync_fundamentals(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return FundamentalSyncView.model_validate(result)
+
+
+def _validate_import_headers(request: Request, max_file_bytes: int) -> None:
+    content_types = request.headers.getlist("content-type")
+    if len(content_types) != 1:
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    media_type, _ = parse_options_header(content_types[0])
+    if media_type.lower() != b"multipart/form-data":
+        raise HTTPException(status_code=415, detail="Expected multipart/form-data")
+    lengths = request.headers.getlist("content-length")
+    if lengths:
+        if len(lengths) != 1 or re.fullmatch(r"[0-9]+", lengths[0]) is None:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        # Compare decimal strings first: an arbitrarily long integer is still
+        # oversized, without invoking Python's integer conversion length limit.
+        length = lengths[0].lstrip("0") or "0"
+        ceiling = str(2 * max_file_bytes + 1024 * 1024)
+        if len(length) > len(ceiling) or (len(length) == len(ceiling) and length > ceiling):
+            raise HTTPException(status_code=413, detail="SEC upload exceeds the request size limit")
+
+
+async def _read_import_upload(upload: UploadFile, max_file_bytes: int) -> bytes:
+    if upload.size is not None and upload.size > max_file_bytes:
+        raise SecImportFileTooLargeError("SEC JSON file exceeds the configured limit")
+    chunks = bytearray()
+    while True:
+        chunk = await upload.read(min(64 * 1024, max_file_bytes - len(chunks) + 1))
+        if not chunk:
+            return bytes(chunks)
+        chunks.extend(chunk)
+        if len(chunks) > max_file_bytes:
+            raise SecImportFileTooLargeError("SEC JSON file exceeds the configured limit")
+
+
+class _ClosingMultipartParser(MultiPartParser):
+    """Lifecycle adapter only: Starlette/python-multipart still parse the body.
+
+    Starlette 1.3 does not close its spooled files on MultipartParseError or on
+    truncated input, and python-multipart.finalize() does not validate EOF.
+    Keep this fix endpoint-local; never patch the global parser/middleware.
+    """
+
+    _finished = False
+
+    def on_end(self) -> None:
+        super().on_end()
+        self._finished = True
+
+    async def parse(self) -> FormData:
+        try:
+            form = await super().parse()
+            if not self._finished:
+                raise MultiPartException("Incomplete multipart upload")
+            return form
+        except BaseException:
+            # Includes not-yet-completed parts, not just files in FormData.
+            for file in self._files_to_close_on_error:
+                file.close()
+            raise
+
+
+class _ImportUploadRequest(Request):
+    async def _get_form(
+        self, *, max_files: int | float = 1000, max_fields: int | float = 1000,
+        max_part_size: int = 1024 * 1024,
+    ) -> FormData:
+        if self._form is None:
+            self._form = await _ClosingMultipartParser(
+                self.headers, self.stream(), max_files=max_files,
+                max_fields=max_fields, max_part_size=max_part_size,
+            ).parse()
+        return self._form
+
+
+@router.post(
+    "/{symbol}/import-json", response_model=FundamentalSyncView,
+    openapi_extra={"requestBody": {"required": True, "content": {
+        "multipart/form-data": {"schema": {
+            "type": "object", "required": ["submissions", "companyfacts"],
+            "additionalProperties": False,
+            "properties": {
+                "submissions": {"type": "string", "format": "binary"},
+                "companyfacts": {"type": "string", "format": "binary"},
+            },
+        }},
+    }}},
+)
+async def import_fundamentals_json(
+    request: Request,
+    symbol: str,
+    session: Annotated[Session, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FundamentalSyncView:
+    # No File/Form dependencies: security must run BEFORE Starlette spools data.
+    require_local_request(request, allowed_origins=settings.cors_origins)
+    max_file_bytes = max(0, settings.sec_import_max_file_mb * 1024 * 1024)
+    _validate_import_headers(request, max_file_bytes)
+    request = _ImportUploadRequest(request.scope, request.receive)
+    try:
+        async with request.form(max_files=2, max_fields=0) as form:
+            parts = form.multi_items()
+            if (
+                len(parts) != 2
+                or {name for name, _ in parts} != {"submissions", "companyfacts"}
+                or any(not isinstance(upload, UploadFile) for _, upload in parts)
+            ):
+                raise HTTPException(status_code=400, detail="Exactly submissions and companyfacts files are required")
+            submissions, companyfacts = form["submissions"], form["companyfacts"]
+            for upload in (submissions, companyfacts):
+                if upload.size is not None and upload.size > max_file_bytes:
+                    raise SecImportFileTooLargeError("SEC JSON file exceeds the configured limit")
+            submissions_bytes = await _read_import_upload(submissions, max_file_bytes)
+            companyfacts_bytes = await _read_import_upload(companyfacts, max_file_bytes)
+            # Decode, parse, validate, query and commit sequentially in ONE worker
+            # invocation. The event loop never uses the SQLAlchemy session.
+            result = await run_in_threadpool(
+                SecManualJsonImportService(session, max_file_mb=settings.sec_import_max_file_mb).import_bytes,
+                symbol=symbol, submissions=submissions_bytes, companyfacts=companyfacts_bytes,
+                submissions_filename=submissions.filename, companyfacts_filename=companyfacts.filename,
+            )
+            return FundamentalSyncView.model_validate(result)
+    except SecImportError as error:
+        error_status = 422
+        if isinstance(error, SecImportFileTooLargeError):
+            error_status = 413
+        elif isinstance(error, SecImportInvalidJsonError):
+            error_status = 400
+        elif isinstance(error, SecImportIdentityConflictError):
+            error_status = 409
+        elif isinstance(error, SecImportTransactionFailedError):
+            error_status = 500
+        raise HTTPException(status_code=error_status, detail={
+            "code": error.code, "provider": "sec_edgar", "message": str(error),
+        }) from None
+    except (MultiPartException, MultipartParseError):
+        raise HTTPException(status_code=400, detail="Invalid multipart upload") from None
+    except StarletteHTTPException as error:
+        # Starlette converts parser errors to HTTPException; do not echo raw
+        # multipart header values or filenames that might be embedded in them.
+        if error.status_code == 400:
+            raise HTTPException(status_code=400, detail="Invalid multipart upload") from None
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail={
+            "code": "sec_import_transaction_failed", "provider": "sec_edgar",
+            "message": "SEC JSON import failed",
+        }) from None
