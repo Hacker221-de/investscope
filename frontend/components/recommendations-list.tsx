@@ -78,13 +78,13 @@ export function RecommendationsList() {
     },
     { BUY: 0, HOLD: 0, SELL: 0 },
   );
-  const latestCalculation = recommendations
+  const latestDemoDate = recommendations
     .map((recommendation) => recommendation.generated_at)
     .sort()
     .at(-1);
 
   if (loading) {
-    return <p className="market-message">Загрузка аналитических рейтингов…</p>;
+    return <p className="market-message">Загрузка демонстрационных рейтингов…</p>;
   }
 
   if (error) {
@@ -95,14 +95,14 @@ export function RecommendationsList() {
     return (
       <>
         <section className="research-summary">
-          <div><strong>0</strong><span>Активных рейтингов</span></div>
+          <div><strong>0</strong><span>Демо-рейтингов</span></div>
           <div><strong>0</strong><span>Положительных</span></div>
           <div><strong>0</strong><span>Нейтральных</span></div>
           <div><strong>0</strong><span>Отрицательных</span></div>
         </section>
         <div className="portfolio-empty-state">
           <span>Нет данных</span>
-          <p>Аналитические рейтинги пока отсутствуют.</p>
+          <p>Демонстрационные рейтинги пока отсутствуют.</p>
         </div>
       </>
     );
@@ -111,7 +111,7 @@ export function RecommendationsList() {
   return (
     <>
       <section className="research-summary">
-        <div><strong>{recommendations.length}</strong><span>Активных рейтингов</span></div>
+        <div><strong>{recommendations.length}</strong><span>Демо-рейтингов</span></div>
         {(["BUY", "HOLD", "SELL"] as const).map((rating) => (
           <div key={rating}><strong>{counts[rating]}</strong><span>{ratingLabels[rating]}</span></div>
         ))}
@@ -154,13 +154,13 @@ export function RecommendationsList() {
                   </div>
                 </div>
                 <div className="rating-metadata">
-                  <span>Дата расчёта: <strong>{formatDateTime(recommendation.generated_at)}</strong></span>
-                  <span>Источник рейтинга: <strong>backend API</strong></span>
+                  <span>Дата демо-примера: <strong>{formatDateTime(recommendation.generated_at)} UTC</strong></span>
+                  <span>Источник рейтинга: <strong>Демонстрационный набор</strong></span>
                   <span>Статус цены: <strong>{quote?.is_stale ? "Устарела" : quote ? "Актуальна" : "Нет данных"}</strong></span>
                 </div>
               </div>
               <aside className="recommendation-price">
-                <small>Текущая цена</small>
+                <small>Сохранённая цена</small>
                 <strong>{price === null || quote === null ? "Нет данных" : formatMoney(price, quote.currency)}</strong>
                 <small>Источник цены</small>
                 <strong>{quote?.source ?? "—"}</strong>
@@ -171,11 +171,13 @@ export function RecommendationsList() {
         })}
       </section>
       <div className="method-note">
-        <strong>Методика</strong>
+        <strong>Демонстрационные данные</strong>
         <p>
-          Рейтинги и цены загружаются из backend API. Раздел является аналитическим и не создаёт торговые поручения
+          Рейтинги — фиксированные демонстрационные примеры, а не актуальные оценки компаний.
+          Сохранённые котировки показаны отдельно со своим источником и временем загрузки; они не влияют на демо-рейтинг.
+          Раздел является аналитическим и не создаёт торговые поручения
           или индивидуальные инвестиционные рекомендации.
-          {latestCalculation ? ` Последний расчёт: ${formatDateTime(latestCalculation)} UTC.` : ""}
+          {latestDemoDate ? ` Дата демо-набора: ${formatDateTime(latestDemoDate)} UTC.` : ""}
         </p>
       </div>
     </>

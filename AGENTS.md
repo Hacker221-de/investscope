@@ -78,6 +78,12 @@ Analytics and API handlers must depend on `MarketDataProvider`, never directly o
 51. Every derived quarter must expose `derived`, `derivation_method`, `calculation`, confidence, warnings, and every operand in `source_facts`; the frontend must label it as calculated.
 52. Debt aggregation must use non-overlapping components. Never add `LongTermDebt` to `LongTermDebtCurrent` or `LongTermDebtNoncurrent`; add short borrowing/commercial paper only when it is not already represented by the chosen aggregate.
 
+## Backend financial Decimal code
+
+- Do not perform SQL SUM/AVG/arithmetic over ExactNumeric SQLite-encoded values.
+- Financial Decimal aggregation/arithmetic must be done in Python Decimal unless a dialect-safe implementation is explicitly added and tested.
+- Raw SQLite inserts into ExactNumeric columns must use SQLAlchemy TypeDecorator processors.
+
 ## Portfolio valuation
 
 - Ownership comes only from user input, never from an external account.

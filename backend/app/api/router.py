@@ -143,7 +143,11 @@ def _view_for_id(
     return view
 
 
-@router.get("/dashboard", response_model=DashboardSummary)
+@router.get(
+    "/dashboard",
+    response_model=DashboardSummary,
+    description="Saved portfolio valuation with fixed demo recommendation and event counters.",
+)
 def dashboard(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -159,7 +163,7 @@ def dashboard(
         total_return_percent=portfolio.total_return_percent if portfolio else Decimal("0"),
         active_recommendations=len(RECOMMENDATIONS),
         high_impact_events=sum(event["impact"] == "high" for event in POLITICAL_EVENTS),
-        market_status="DEMO MARKET DATA",
+        market_status="DEMO RATINGS AND EVENTS",
     )
 
 
@@ -176,7 +180,11 @@ def asset_detail(symbol: str) -> AssetDetail:
     return AssetDetail.model_validate(asset)
 
 
-@router.get("/recommendations", response_model=list[RecommendationView])
+@router.get(
+    "/recommendations",
+    response_model=list[RecommendationView],
+    description="Fixed demonstration ratings; not recalculated from current company or market data.",
+)
 def list_recommendations() -> list[RecommendationView]:
     return [RecommendationView.model_validate(item) for item in RECOMMENDATIONS]
 

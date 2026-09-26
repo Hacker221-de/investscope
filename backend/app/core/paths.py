@@ -13,6 +13,10 @@ class DesktopPaths:
     backups_dir: Path
 
 
+def _nonblank_path(value: str | Path | None) -> str | Path | None:
+    return None if isinstance(value, str) and not value.strip() else value
+
+
 def get_desktop_paths(
     data_dir: str | Path | None = None,
     *,
@@ -20,17 +24,17 @@ def get_desktop_paths(
 ) -> DesktopPaths:
     """Resolve desktop paths without creating files or directories."""
     environment = os.environ if environ is None else environ
-    configured_dir = data_dir or environment.get("INVESTSCOPE_DATA_DIR")
+    configured_dir = _nonblank_path(data_dir) or _nonblank_path(environment.get("INVESTSCOPE_DATA_DIR"))
     if configured_dir is not None:
         root_dir = Path(configured_dir).expanduser().resolve()
     else:
-        app_data = environment.get("APPDATA")
+        app_data = _nonblank_path(environment.get("APPDATA"))
         if app_data:
             root_dir = (Path(app_data) / "InvestScope").resolve()
         else:
             # This fallback keeps tests and non-Windows development usable while
             # Windows continues to default to %APPDATA%\InvestScope.
-            data_home = environment.get("XDG_DATA_HOME")
+            data_home = _nonblank_path(environment.get("XDG_DATA_HOME"))
             base_dir = Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share"
             root_dir = (base_dir / "InvestScope").resolve()
 

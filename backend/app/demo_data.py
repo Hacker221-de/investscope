@@ -1,3 +1,9 @@
+"""Fixed demo fixtures for legacy endpoints and explicit demo providers.
+
+Recommendation scores and event dates are examples, not a live analytical feed.
+Database-backed /api/assets does not use this catalog as its source.
+"""
+
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any

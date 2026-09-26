@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     @field_validator("data_dir", mode="before")
     @classmethod
     def empty_data_dir_uses_platform_default(cls, value: object) -> object:
-        return None if value == "" else value
+        return None if isinstance(value, str) and not value.strip() else value
 
     model_config = SettingsConfigDict(
         env_file=".env",

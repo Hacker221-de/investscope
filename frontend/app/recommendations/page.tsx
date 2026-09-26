@@ -1,15 +1,15 @@
 import { RecommendationsList } from "@/components/recommendations-list";
 import { PageHeader } from "@/components/ui";
 
-export const metadata = { title: "Аналитические рейтинги" };
+export const metadata = { title: "Демонстрационные рейтинги" };
 
 export default function RecommendationsPage() {
   return (
     <>
       <PageHeader
-        title="Аналитические рейтинги"
-        description="Объяснимые оценки из backend API с привязкой к активам, сохранённым в базе данных."
-        action={<span className="timestamp">Источник: backend API</span>}
+        title="Демонстрационные рейтинги"
+        description="Фиксированные примеры аналитических оценок для знакомства с интерфейсом. Они не пересчитываются по текущим данным компаний."
+        action={<span className="timestamp">ДЕМО · Примеры рейтингов</span>}
       />
       <RecommendationsList />
     </>

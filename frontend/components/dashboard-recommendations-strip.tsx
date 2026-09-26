@@ -57,8 +57,8 @@ export function DashboardRecommendationsStrip() {
   return (
     <section className="panel recommendations-strip">
       <div>
-        <p className="eyebrow">Последний расчёт</p>
-        <h2>Аналитические рейтинги</h2>
+        <p className="eyebrow">ДЕМО · Фиксированные примеры</p>
+        <h2>Демонстрационные рейтинги</h2>
       </div>
       {loading ? (
         <span className="mini-recommendation">Загрузка рейтингов…</span>
@@ -80,7 +80,7 @@ export function DashboardRecommendationsStrip() {
                 <small>
                   {price === null || quote === null
                     ? asset?.name ?? "Нет сохранённой цены"
-                    : `${asset?.name ?? "Цена"} · ${formatMoney(price, quote.currency)}`}
+                    : `${asset?.name ?? recommendation.symbol} · Сохранённая цена: ${formatMoney(price, quote.currency)}`}
                 </small>
               </span>
               <RatingBadge rating={recommendation.rating} />
@@ -90,7 +90,7 @@ export function DashboardRecommendationsStrip() {
       ) : (
         <span className="mini-recommendation">Рейтинги пока отсутствуют.</span>
       )}
-      <Link href="/recommendations" className="text-link">Все рейтинги →</Link>
+      <Link href="/recommendations" className="text-link">Все демо-рейтинги →</Link>
     </section>
   );
 }
