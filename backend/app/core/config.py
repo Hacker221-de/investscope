@@ -13,7 +13,11 @@ class Settings(BaseSettings):
     data_dir: Path | None = None
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://investscope:investscope@db:5432/investscope"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = [
+        "http://127.0.0.1:3200",
+        "http://localhost:3200",
+        "http://localhost:3000",  # Docker frontend still publishes port 3000.
+    ]
     market_data_provider: str = "demo"
     alpha_vantage_api_key: SecretStr | None = None
     alpha_vantage_base_url: str = "https://www.alphavantage.co/query"

@@ -20,7 +20,7 @@ services:
     build: ./backend
     environment:
       INVESTSCOPE_DATABASE_URL: ${INVESTSCOPE_DATABASE_URL:-postgresql+psycopg://investscope:investscope@db:5432/investscope}
-      INVESTSCOPE_CORS_ORIGINS: '["http://localhost:3000"]'
+      INVESTSCOPE_CORS_ORIGINS: '${INVESTSCOPE_CORS_ORIGINS:-["http://127.0.0.1:3200","http://localhost:3200","http://localhost:3000"]}'
       INVESTSCOPE_MARKET_DATA_PROVIDER: ${INVESTSCOPE_MARKET_DATA_PROVIDER:-demo}
       INVESTSCOPE_ALPHA_VANTAGE_API_KEY: ${INVESTSCOPE_ALPHA_VANTAGE_API_KEY:-}
       INVESTSCOPE_ALPHA_VANTAGE_BASE_URL: ${INVESTSCOPE_ALPHA_VANTAGE_BASE_URL:-https://www.alphavantage.co/query}

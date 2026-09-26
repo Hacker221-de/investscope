@@ -2,6 +2,24 @@
 
 FastAPI service for investment research and analytics of positions entered manually by the user. See the repository-level README for setup.
 
+## Development CORS and dependency compatibility
+
+The default browser origin allowlist is `http://127.0.0.1:3200`,
+`http://localhost:3200`, and `http://localhost:3000`. Port 3200 is used by
+`npm run dev`; localhost:3000 remains allowed for the existing Docker frontend
+mapping `3000:3000`. Root `.env.example` and Compose use the same list.
+Override the entire list with the JSON-valued `INVESTSCOPE_CORS_ORIGINS` environment
+variable, including in Compose. No wildcard or external origin is enabled by
+default; SEC uploads still require an explicitly allowed loopback Origin.
+Existing local `.env` overrides take precedence and are not modified automatically.
+
+The SEC upload adapter uses private Starlette lifecycle hooks verified with
+FastAPI 0.138.2 and Starlette 1.3.1. The direct requirement
+`starlette>=1.3.1,<1.4` retains that minor family; installed FastAPI requires
+`starlette>=0.46.0`, so the constraints are compatible. Review and rerun upload
+cleanup/security tests before widening this range; no dependency upgrade is
+needed for this constraint.
+
 ## Offline SEC JSON import (Stage 4A)
 
 Use official SEC submissions/companyfacts JSON obtained out of band. This is not

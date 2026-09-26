@@ -65,6 +65,38 @@ def counts(session):
 
 
 @pytest.mark.parametrize("mode", ["server", "desktop"])
+@pytest.mark.parametrize(("host", "origin", "expected_status"), [
+    ("127.0.0.1", "http://127.0.0.1:3200", 200),
+    ("localhost", "http://localhost:3200", 200),
+    ("127.0.0.1", "https://evil.example", 403),
+    ("testserver", "http://127.0.0.1:3200", 403),
+])
+def test_fresh_clone_cors_defaults_for_sec_import(
+    import_client, import_settings, monkeypatch, mode, host, origin, expected_status,
+):
+    monkeypatch.delenv("INVESTSCOPE_CORS_ORIGINS", raising=False)
+    defaults = Settings(_env_file=None)
+    assert defaults.cors_origins == [
+        "http://127.0.0.1:3200", "http://localhost:3200", "http://localhost:3000",
+    ]
+    import_settings.cors_origins = defaults.cors_origins
+    import_settings.mode = mode
+    response = import_client.post(URL, files=uploads(), headers={"host": host, "origin": origin})
+    assert response.status_code == expected_status, response.text
+
+
+def test_cors_environment_override_remains_source_of_truth(import_client, import_settings, monkeypatch):
+    origin = "http://127.0.0.1:4311"
+    monkeypatch.setenv("INVESTSCOPE_CORS_ORIGINS", json.dumps([origin]))
+    overridden = Settings(_env_file=None)
+    assert overridden.cors_origins == [origin]
+    import_settings.cors_origins = overridden.cors_origins
+    assert import_client.post(URL, files=uploads(), headers={"origin": origin}).status_code == 200
+    for default_origin in ("http://127.0.0.1:3200", "http://localhost:3200"):
+        assert import_client.post(URL, files=uploads(), headers={"origin": default_origin}).status_code == 403
+
+
+@pytest.mark.parametrize("mode", ["server", "desktop"])
 @pytest.mark.parametrize(("host", "origin"), [
     ("127.0.0.1", ORIGIN), ("localhost:18000", ORIGIN), ("[::1]:18000", "http://[::1]:3000"),
     ("127.0.0.1:8000", None),
