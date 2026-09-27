@@ -7,7 +7,7 @@ from app.main import app
 from app.modules.backtesting import fixed_demo_series, sma_crossover_analysis
 
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1")
 
 
 def test_sma_analysis_is_deterministic_and_updates_both_curves() -> None:

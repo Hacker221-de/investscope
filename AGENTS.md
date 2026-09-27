@@ -84,6 +84,19 @@ Analytics and API handlers must depend on `MarketDataProvider`, never directly o
 - Financial Decimal aggregation/arithmetic must be done in Python Decimal unless a dialect-safe implementation is explicitly added and tested.
 - Raw SQLite inserts into ExactNumeric columns must use SQLAlchemy TypeDecorator processors.
 
+## Global API security
+
+- Keep pure ASGI Host/Origin security outside CORS and before any body processing.
+- Validate Host on all HTTP requests and WebSocket handshakes. Validate supplied Origin
+  on all HTTP methods except GET/HEAD/OPTIONS. Never trust forwarded headers.
+- Desktop stays loopback-only; server remote hosts require explicit `trusted_hosts`.
+  Browser origins separately require exact `cors_origins` membership. Preserve the
+  stricter loopback-only SEC import guard and the shared authority parser.
+- Invalid trusted-host config must fail startup. Never add wildcard/testserver to defaults.
+- Security policy tests use explicit constructor config, not dependency overrides or
+  mutation of global settings. Keep receive-counter pre-body regressions.
+- Docker published ports stay loopback-bound by default; remote access is explicit.
+
 ## Portfolio valuation
 
 - Ownership comes only from user input, never from an external account.

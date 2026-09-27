@@ -149,6 +149,13 @@ Open <http://127.0.0.1:3200>. API documentation is available at <http://127.0.0.
 
 For the complete container stack, run `docker compose up --build` from the repository root and open <http://localhost:3000>.
 
+Docker ports are loopback-bound by default: `127.0.0.1:3000:3000` (frontend),
+`127.0.0.1:8000:8000` (backend), `127.0.0.1:5432:5432` (PostgreSQL). They are not
+accessible from other machines. Intentional remote server deployment requires an
+explicit published-interface change, `INVESTSCOPE_TRUSTED_HOSTS` for allowed HTTP
+Host names, and `INVESTSCOPE_CORS_ORIGINS` for browser origins. These are separate
+controls; see [backend security configuration](backend/README.md#global-api-request-security-stage-4a1).
+
 ## SEC offline import
 
 Live SEC access may reject automated clients even with an identifying User-Agent. InvestScope therefore supports a local, non-network importer for files obtained from the official SEC endpoints.

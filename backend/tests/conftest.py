@@ -38,6 +38,6 @@ def market_client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_settings] = lambda: Settings(
         market_data_provider="demo"
     )
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         yield client
     app.dependency_overrides.clear()

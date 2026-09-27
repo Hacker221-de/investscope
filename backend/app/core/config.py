@@ -5,6 +5,8 @@ from typing import Literal
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.local_request_security import validate_trusted_hostname
+
 
 class Settings(BaseSettings):
     app_name: str = "InvestScope API"
@@ -12,6 +14,7 @@ class Settings(BaseSettings):
     mode: Literal["server", "desktop"] = "server"
     data_dir: Path | None = None
     api_prefix: str = "/api/v1"
+    trusted_hosts: list[str] = ["localhost", "127.0.0.1", "::1"]
     database_url: str = "postgresql+psycopg://investscope:investscope@db:5432/investscope"
     cors_origins: list[str] = [
         "http://127.0.0.1:3200",
@@ -35,6 +38,11 @@ class Settings(BaseSettings):
     sec_ticker_cache_ttl_hours: int = 168
     sec_request_timeout_seconds: float = 30.0
     sec_import_max_file_mb: int = 100
+
+    @field_validator("trusted_hosts")
+    @classmethod
+    def validate_trusted_hosts(cls, value: list[str]) -> list[str]:
+        return [validate_trusted_hostname(host) for host in value]
 
     @field_validator("data_dir", mode="before")
     @classmethod

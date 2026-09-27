@@ -16,7 +16,7 @@ from starlette.requests import Request
 from app.api import fundamentals as api
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
-from app.main import app
+from app.main import create_app
 from app.models import Asset, CompanyFiling, CompanyProfile, FinancialFact
 from app.modules.fundamental_analysis.manual_import import SecImportFileTooLargeError
 from app.repositories import FundamentalRepository
@@ -39,7 +39,13 @@ def import_client(db_session: Session, import_settings: Settings) -> Iterator[Te
         with Session(db_session.get_bind(), expire_on_commit=False, autoflush=False) as session:
             yield session
 
-    original = app.dependency_overrides.copy()
+    # Explicit, fixed middleware policy; dependency overrides below ONLY control
+    # the endpoint's stricter Stage 4A policy. Allow its test origins globally so
+    # these regressions still exercise the endpoint guard itself.
+    app = create_app(Settings(
+        _env_file=None, mode="server", trusted_hosts=["localhost", "127.0.0.1", "::1"],
+        cors_origins=[*import_settings.cors_origins, "http://localhost:3200", "http://127.0.0.1:4311"],
+    ))
     app.dependency_overrides[get_db] = database
     app.dependency_overrides[get_settings] = lambda: import_settings
     try:
@@ -47,7 +53,6 @@ def import_client(db_session: Session, import_settings: Settings) -> Iterator[Te
             yield client
     finally:
         app.dependency_overrides.clear()
-        app.dependency_overrides.update(original)
 
 
 def uploads(submissions=None, companyfacts=None, names=("submissions.json", "companyfacts.json")):
@@ -150,7 +155,7 @@ def test_security_rejection_precedes_form_and_import(
         async def without_host(scope, receive, send):
             if scope["type"] == "http":
                 scope = {**scope, "headers": [(key, value) for key, value in scope["headers"] if key != b"host"]}
-            await app(scope, receive, send)
+            await import_client.app(scope, receive, send)
         with TestClient(without_host, base_url="http://127.0.0.1") as no_host_client:
             response = no_host_client.send(request)
     else:
