@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { DashboardRecommendationsStrip } from "@/components/dashboard-recommendations-strip";
 import { DashboardPortfolioSummary } from "@/components/dashboard-portfolio-summary";
 import { PageHeader } from "@/components/ui";
 import { events } from "@/lib/demo-data";
@@ -10,7 +9,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Обзор"
-        description="Сводка по сохранённому портфелю. Рейтинги и календарь рисков представлены демонстрационными примерами."
+        description="Сводка по сохранённому портфелю. Календарь событий представлен демонстрационными примерами."
       />
 
       <DashboardPortfolioSummary eventPanel={
@@ -19,8 +18,6 @@ export default function DashboardPage() {
           {events.slice(0, 2).map((event) => <div className="event-row" key={event.title}><div className="event-date"><strong>{event.date.slice(-2)}</strong><small>ИЮЛ</small></div><div><span className={`impact ${event.impact.toLowerCase()}`}>{event.impact === "High" ? "Высокое" : "Среднее"}</span><h3>{event.title}</h3><p>{event.time} · {event.region}</p></div></div>)}
         </article>
       } />
-
-      <DashboardRecommendationsStrip />
     </>
   );
 }
