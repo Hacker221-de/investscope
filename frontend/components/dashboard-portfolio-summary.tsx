@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-import { DemoRecommendationsSummary } from "@/components/demo-recommendations-summary";
 import { MetricCard } from "@/components/ui";
 import { formatApiError, getPortfolio, listAssets, listPortfolios } from "@/lib/api";
 import type { DecimalJson, MarketAsset, PortfolioDetail, Position } from "@/lib/types";
@@ -151,7 +150,7 @@ export function DashboardPortfolioSummary({ eventPanel }: DashboardPortfolioSumm
     <>
       {error && <p className="market-message error">{error}</p>}
 
-      <section className="metrics-grid" aria-label="Показатели портфеля">
+      <section className="metrics-grid dashboard-metrics" aria-label="Показатели портфеля">
         <MetricCard
           label="Текущая стоимость портфеля"
           value={valued.length ? money(currentValue, baseCurrency) : "Нет данных"}
@@ -168,7 +167,6 @@ export function DashboardPortfolioSummary({ eventPanel }: DashboardPortfolioSumm
           detail={totalReturn === null ? "Нет оценённых позиций" : `Доходность: ${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%`}
           tone={valued.length ? unrealizedPnl >= 0 ? "positive" : "negative" : undefined}
         />
-        <DemoRecommendationsSummary />
       </section>
 
       <section className="dashboard-grid">
